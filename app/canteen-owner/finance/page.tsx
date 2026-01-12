@@ -1,0 +1,243 @@
+"use client"
+
+import { useState } from "react"
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { GlassCard } from "@/components/molecules/glass-card"
+import { 
+  mockCanteenOwners,
+  getOrdersByCanteen,
+} from "@/lib/mock-data"
+import { 
+  ArrowLeft,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  ShoppingBag,
+  Calendar,
+  Download,
+  BarChart3,
+} from "lucide-react"
+import Link from "next/link"
+import { cn } from "@/lib/utils"
+
+export default function CanteenOwnerFinancePage() {
+  const owner = mockCanteenOwners[0]
+  const orders = getOrdersByCanteen(owner.canteenId)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("today")
+
+  const completedOrders = orders.filter(o => o.status === "COMPLETED")
+
+  // Calculate revenues
+  const todayOrders = completedOrders.filter(o => o.createdAt.startsWith("2025-12-30"))
+  const todayRevenue = todayOrders.reduce((acc, o) => acc + o.totalAmount, 0)
+  
+  const weekOrders = completedOrders.filter(o => {
+    const orderDate = new Date(o.createdAt)
+    const weekAgo = new Date("2025-12-23")
+    return orderDate >= weekAgo
+  })
+  const weekRevenue = weekOrders.reduce((acc, o) => acc + o.totalAmount, 0)
+
+  const monthRevenue = completedOrders.reduce((acc, o) => acc + o.totalAmount, 0)
+
+  // Mock daily revenue data
+  const dailyRevenue = [
+    { date: "24 Des", revenue: 150000, orders: 12 },
+    { date: "25 Des", revenue: 180000, orders: 15 },
+    { date: "26 Des", revenue: 120000, orders: 10 },
+    { date: "27 Des", revenue: 200000, orders: 18 },
+    { date: "28 Des", revenue: 175000, orders: 14 },
+    { date: "29 Des", revenue: 220000, orders: 20 },
+    { date: "30 Des", revenue: todayRevenue, orders: todayOrders.length },
+  ]
+
+  // Top selling products (mock)
+  const topProducts = [
+    { name: "Nasi Uduk", sold: 45, revenue: 675000 },
+    { name: "Soto Ayam", sold: 38, revenue: 456000 },
+    { name: "Es Teh Manis", sold: 72, revenue: 360000 },
+    { name: "Kue Lumpur", sold: 60, revenue: 180000 },
+  ]
+
+  const maxRevenue = Math.max(...dailyRevenue.map(d => d.revenue))
+
+  const periods = [
+    { value: "today", label: "Hari Ini" },
+    { value: "week", label: "Minggu Ini" },
+    { value: "month", label: "Bulan Ini" },
+  ]
+
+  return (
+    <DashboardLayout role="CANTEEN_OWNER" userName={owner.name} userAvatar={owner.avatar}>
+      <div className="max-w-4xl mx-auto space-y-6 px-1">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/canteen-owner" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">Laporan Keuangan</h1>
+              <p className="text-slate-500 text-sm">Ringkasan pendapatan dan penjualan</p>
+            </div>
+          </div>
+          <button className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        </div>
+
+        {/* Period Selector */}
+        <div className="flex gap-2">
+          {periods.map(period => (
+            <button
+              key={period.value}
+              onClick={() => setSelectedPeriod(period.value)}
+              className={cn(
+                "flex-1 py-2.5 rounded-xl text-sm font-medium transition-all",
+                selectedPeriod === period.value
+                  ? "bg-blue-500 text-white"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {period.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Revenue Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <GlassCard className={cn(
+            "p-5 relative overflow-hidden",
+            selectedPeriod === "today" ? "ring-2 ring-blue-500" : ""
+          )}>
+            <div className="absolute top-0 right-0 w-20 h-20 bg-green-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-green-600 mb-2">
+                <Wallet className="w-5 h-5" />
+                <span className="text-sm font-medium">Hari Ini</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-800">Rp {todayRevenue.toLocaleString()}</p>
+              <p className="text-sm text-slate-500 mt-1">{todayOrders.length} order selesai</p>
+            </div>
+          </GlassCard>
+
+          <GlassCard className={cn(
+            "p-5 relative overflow-hidden",
+            selectedPeriod === "week" ? "ring-2 ring-blue-500" : ""
+          )}>
+            <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-blue-600 mb-2">
+                <TrendingUp className="w-5 h-5" />
+                <span className="text-sm font-medium">Minggu Ini</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-800">Rp {weekRevenue.toLocaleString()}</p>
+              <p className="text-sm text-slate-500 mt-1">{weekOrders.length} order selesai</p>
+            </div>
+          </GlassCard>
+
+          <GlassCard className={cn(
+            "p-5 relative overflow-hidden",
+            selectedPeriod === "month" ? "ring-2 ring-blue-500" : ""
+          )}>
+            <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-purple-600 mb-2">
+                <Calendar className="w-5 h-5" />
+                <span className="text-sm font-medium">Bulan Ini</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-800">Rp {monthRevenue.toLocaleString()}</p>
+              <p className="text-sm text-slate-500 mt-1">{completedOrders.length} order selesai</p>
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* Revenue Chart */}
+        <GlassCard className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-800">Pendapatan 7 Hari Terakhir</h3>
+            <BarChart3 className="w-5 h-5 text-slate-400" />
+          </div>
+          <div className="flex items-end justify-between gap-2 h-40">
+            {dailyRevenue.map((day, idx) => (
+              <div key={idx} className="flex-1 flex flex-col items-center gap-2">
+                <div className="w-full flex flex-col items-center">
+                  <span className="text-xs text-slate-600 font-medium mb-1">
+                    Rp {(day.revenue / 1000).toFixed(0)}k
+                  </span>
+                  <div 
+                    className={cn(
+                      "w-full rounded-t-lg transition-all",
+                      idx === dailyRevenue.length - 1 ? "bg-blue-500" : "bg-blue-200"
+                    )}
+                    style={{ height: `${(day.revenue / maxRevenue) * 100}px` }}
+                  />
+                </div>
+                <span className="text-xs text-slate-500">{day.date}</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Top Products */}
+        <GlassCard className="p-5">
+          <h3 className="font-semibold text-slate-800 mb-4">Produk Terlaris</h3>
+          <div className="space-y-3">
+            {topProducts.map((product, idx) => (
+              <div key={idx} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+                <div className="flex items-center gap-3">
+                  <span className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
+                    idx === 0 ? "bg-yellow-100 text-yellow-700" :
+                    idx === 1 ? "bg-slate-200 text-slate-700" :
+                    idx === 2 ? "bg-orange-100 text-orange-700" :
+                    "bg-slate-100 text-slate-600"
+                  )}>
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <p className="font-medium text-slate-800">{product.name}</p>
+                    <p className="text-sm text-slate-500">{product.sold} terjual</p>
+                  </div>
+                </div>
+                <p className="font-semibold text-slate-800">Rp {product.revenue.toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Recent Transactions */}
+        <GlassCard className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-800">Transaksi Terakhir</h3>
+            <Link href="/canteen-owner/orders" className="text-sm text-blue-500">
+              Lihat Semua
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {completedOrders.slice(0, 5).map(order => (
+              <div key={order.id} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-green-100">
+                    <ShoppingBag className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-800">#{order.id.toUpperCase()}</p>
+                    <p className="text-sm text-slate-500">{order.customerName}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-green-600">+Rp {order.totalAmount.toLocaleString()}</p>
+                  <p className="text-xs text-slate-400">
+                    {new Date(order.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+    </DashboardLayout>
+  )
+}

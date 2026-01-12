@@ -1,0 +1,535 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Added xs breakpoint support via custom screen */
+@custom-media --xs (min-width: 480px);
+
+/* Updated to professional blue/gray design system */
+:root {
+  --background: oklch(0.98 0.005 240);
+  --foreground: oklch(0.15 0.01 240);
+  --card: oklch(1 0 0 / 0.85);
+  --card-foreground: oklch(0.15 0.01 240);
+  --popover: oklch(1 0 0 / 0.95);
+  --popover-foreground: oklch(0.15 0.01 240);
+  --primary: oklch(0.45 0.15 240);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.92 0.01 240);
+  --secondary-foreground: oklch(0.25 0.02 240);
+  --muted: oklch(0.95 0.005 240);
+  --muted-foreground: oklch(0.45 0.02 240);
+  --accent: oklch(0.55 0.12 220);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.9 0.01 240);
+  --input: oklch(0.95 0.005 240);
+  --ring: oklch(0.5 0.15 240);
+  --chart-1: oklch(0.55 0.15 240);
+  --chart-2: oklch(0.6 0.12 200);
+  --chart-3: oklch(0.5 0.1 160);
+  --chart-4: oklch(0.55 0.08 280);
+  --chart-5: oklch(0.6 0.15 30);
+  --radius: 1rem;
+  --sidebar: oklch(0.98 0.005 240);
+  --sidebar-foreground: oklch(0.25 0.02 240);
+  --sidebar-primary: oklch(0.45 0.15 240);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.01 240);
+  --sidebar-accent-foreground: oklch(0.25 0.02 240);
+  --sidebar-border: oklch(0.9 0.01 240);
+  --sidebar-ring: oklch(0.5 0.15 240);
+}
+
+.dark {
+  --background: oklch(0.12 0.015 240);
+  --foreground: oklch(0.95 0.005 240);
+  --card: oklch(0.18 0.015 240);
+  --card-foreground: oklch(0.95 0.005 240);
+  --popover: oklch(0.15 0.015 240);
+  --popover-foreground: oklch(0.95 0.005 240);
+  --primary: oklch(0.6 0.15 220);
+  --primary-foreground: oklch(0.1 0.01 240);
+  --secondary: oklch(0.22 0.015 240);
+  --secondary-foreground: oklch(0.9 0.005 240);
+  --muted: oklch(0.2 0.015 240);
+  --muted-foreground: oklch(0.65 0.01 240);
+  --accent: oklch(0.5 0.12 220);
+  --accent-foreground: oklch(0.95 0.005 240);
+  --destructive: oklch(0.5 0.2 25);
+  --destructive-foreground: oklch(0.95 0.005 240);
+  --border: oklch(0.25 0.015 240);
+  --input: oklch(0.2 0.015 240);
+  --ring: oklch(0.55 0.15 220);
+  --chart-1: oklch(0.6 0.15 220);
+  --chart-2: oklch(0.55 0.12 200);
+  --chart-3: oklch(0.5 0.1 160);
+  --chart-4: oklch(0.55 0.08 280);
+  --chart-5: oklch(0.6 0.15 30);
+  --sidebar: oklch(0.15 0.015 240);
+  --sidebar-foreground: oklch(0.9 0.005 240);
+  --sidebar-primary: oklch(0.6 0.15 220);
+  --sidebar-primary-foreground: oklch(0.1 0.01 240);
+  --sidebar-accent: oklch(0.22 0.015 240);
+  --sidebar-accent-foreground: oklch(0.9 0.005 240);
+  --sidebar-border: oklch(0.25 0.015 240);
+  --sidebar-ring: oklch(0.55 0.15 220);
+}
+
+@theme inline {
+  --font-sans: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Added smooth transitions for all interactive elements */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth page transitions */
+main {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Added fade-in animation class */
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Staggered animation for lists */
+.animate-stagger > * {
+  animation: fadeIn 0.4s ease-out backwards;
+}
+
+.animate-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.animate-stagger > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.animate-stagger > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.animate-stagger > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.animate-stagger > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+.animate-stagger > *:nth-child(6) {
+  animation-delay: 250ms;
+}
+.animate-stagger > *:nth-child(7) {
+  animation-delay: 300ms;
+}
+.animate-stagger > *:nth-child(8) {
+  animation-delay: 350ms;
+}
+
+/* Added scrollbar-hide utility for horizontal scroll areas */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Professional gradient background */
+.liquid-glass-bg {
+  background: linear-gradient(
+    135deg,
+    oklch(0.95 0.02 220) 0%,
+    oklch(0.97 0.01 240) 25%,
+    oklch(0.98 0.005 230) 50%,
+    oklch(0.96 0.015 235) 75%,
+    oklch(0.95 0.02 220) 100%
+  );
+  background-size: 400% 400%;
+  animation: gradient-shift 20s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Glass morphism utility classes */
+.glass {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth hover effects for glass cards */
+.glass-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+}
+
+.glass-hover:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* ===== CUSTOM ANIMATIONS ===== */
+
+/* Custom bottom sheet animation - smooth spring-like */
+@keyframes slide-up-from-bottom {
+  0% {
+    transform: translateY(100%);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down-to-bottom {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-up-from-bottom {
+  animation: slide-up-from-bottom 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-slide-down-to-bottom {
+  animation: slide-down-to-bottom 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Drawer slide animations */
+@keyframes slideUpFromBottom {
+  0% {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+  60% {
+    transform: translateY(-2%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDownToBottom {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.drawer-enter {
+  transform: translateY(100%);
+  animation: slideUpFromBottom 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.drawer-exit {
+  animation: slideDownToBottom 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Fade animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.fade-enter {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.fade-exit {
+  animation: fadeOut 0.2s ease-out forwards;
+}
+
+/* Page transition */
+@keyframes pageEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: pageEnter 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Toast animations */
+@keyframes toastSlideIn {
+  0% {
+    transform: translateY(-100%) scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes toastSlideOut {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-10%) scale(0.98);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-100%) scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes toastBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.toast-enter {
+  animation: toastSlideIn 0.4s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+}
+
+.toast-exit {
+  animation: toastSlideOut 0.4s cubic-bezier(0.06, 0.71, 0.55, 1) forwards;
+}
+
+/* Sonner toast custom styles for smooth animations */
+[data-sonner-toaster] [data-sonner-toast] {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-mounted="true"] {
+  --y: 0;
+  opacity: 1;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
+  --y: translateY(-100%);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.06, 0.71, 0.55, 1) !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-visible="false"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out !important;
+}
+
+/* Smooth button press */
+.btn-press {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Modal Content Form Styling Override */
+.modal-content {
+  /* Fix form labels that use white text */
+  & .text-white\/70,
+  & .text-white\/60,
+  & .text-white\/50 {
+    color: oklch(0.45 0.02 240) !important;
+  }
+  
+  & .text-white {
+    color: oklch(0.15 0.01 240) !important;
+  }
+  
+  /* Fix background colors for dark backgrounds */
+  & .bg-white\/10,
+  & .bg-white\/5,
+  & .bg-white\/20 {
+    background-color: oklch(0.97 0.005 240) !important;
+  }
+  
+  /* Fix border colors */
+  & .border-white\/20,
+  & .border-white\/10,
+  & .border-white\/30 {
+    border-color: oklch(0.9 0.01 240) !important;
+  }
+  
+  /* Fix select element styling in modals */
+  & select {
+    background-color: white !important;
+    color: oklch(0.25 0.02 240) !important;
+    border-color: oklch(0.9 0.01 240) !important;
+  }
+  
+  & select:focus {
+    border-color: oklch(0.5 0.15 240) !important;
+    outline: none;
+    box-shadow: 0 0 0 3px oklch(0.5 0.15 240 / 0.1);
+  }
+  
+  & select option {
+    background-color: white !important;
+    color: oklch(0.25 0.02 240) !important;
+  }
+}
+
+/* Mobile menu animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Custom duration classes */
+.duration-350 {
+  transition-duration: 350ms;
+}
+
+/* Vaul Drawer - Force bottom direction styles */
+[vaul-drawer][data-vaul-drawer-direction="bottom"] [vaul-drawer-content],
+[data-vaul-drawer-direction="bottom"] {
+  --initial-transform: translateY(100%);
+}
+
+[vaul-drawer-content] {
+  transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Override any top direction styles that might interfere */
+[data-slot="drawer-content"] {
+  inset: auto 0 0 0 !important;
+  top: auto !important;
+  bottom: 0 !important;
+  transform-origin: bottom center;
+}
+
+/* Ensure drawer overlay has smooth animation */
+[data-slot="drawer-overlay"] {
+  transition: opacity 0.3s ease-out;
+}
+
+/* Body styling when drawer is open */
+body[vaul-drawer-wrapper] {
+  transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+}

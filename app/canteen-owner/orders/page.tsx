@@ -1,0 +1,237 @@
+"use client"
+
+import { useState } from "react"
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { GlassCard } from "@/components/molecules/glass-card"
+import { 
+  mockCanteenOwners,
+  getOrdersByCanteen,
+  type Order,
+  type OrderStatus,
+} from "@/lib/mock-data"
+import { 
+  ArrowLeft,
+  Search,
+  Clock,
+  CheckCircle,
+  XCircle,
+  ChefHat,
+  ShoppingBag,
+  Filter,
+} from "lucide-react"
+import Link from "next/link"
+import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+
+export default function CanteenOwnerOrdersPage() {
+  const owner = mockCanteenOwners[0]
+  const [orders, setOrders] = useState<Order[]>(getOrdersByCanteen(owner.canteenId))
+  const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredOrders = orders.filter(o => {
+    const matchesSearch = o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          o.id.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = filterStatus === "all" || o.status === filterStatus
+    return matchesSearch && matchesStatus
+  })
+
+  const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+    setOrders(orders.map(o => o.id === orderId ? { 
+      ...o, 
+      status: newStatus,
+      completedAt: newStatus === "COMPLETED" ? new Date().toISOString() : o.completedAt
+    } : o))
+    toast.success(`Order berhasil di-update ke ${getStatusLabel(newStatus)}`)
+  }
+
+  const getStatusColor = (status: OrderStatus) => {
+    switch (status) {
+      case "PENDING": return "bg-amber-100 text-amber-700 border-amber-200"
+      case "PREPARING": return "bg-blue-100 text-blue-700 border-blue-200"
+      case "READY": return "bg-green-100 text-green-700 border-green-200"
+      case "COMPLETED": return "bg-slate-100 text-slate-700 border-slate-200"
+      case "CANCELLED": return "bg-red-100 text-red-700 border-red-200"
+      default: return "bg-slate-100 text-slate-700 border-slate-200"
+    }
+  }
+
+  const getStatusLabel = (status: OrderStatus) => {
+    switch (status) {
+      case "PENDING": return "Menunggu"
+      case "PREPARING": return "Diproses"
+      case "READY": return "Siap Diambil"
+      case "COMPLETED": return "Selesai"
+      case "CANCELLED": return "Dibatalkan"
+      default: return status
+    }
+  }
+
+  const getStatusIcon = (status: OrderStatus) => {
+    switch (status) {
+      case "PENDING": return <Clock className="w-4 h-4" />
+      case "PREPARING": return <ChefHat className="w-4 h-4" />
+      case "READY": return <CheckCircle className="w-4 h-4" />
+      case "COMPLETED": return <CheckCircle className="w-4 h-4" />
+      case "CANCELLED": return <XCircle className="w-4 h-4" />
+      default: return <Clock className="w-4 h-4" />
+    }
+  }
+
+  const statusFilters = [
+    { value: "all", label: "Semua", count: orders.length },
+    { value: "PENDING", label: "Menunggu", count: orders.filter(o => o.status === "PENDING").length },
+    { value: "PREPARING", label: "Diproses", count: orders.filter(o => o.status === "PREPARING").length },
+    { value: "READY", label: "Siap", count: orders.filter(o => o.status === "READY").length },
+    { value: "COMPLETED", label: "Selesai", count: orders.filter(o => o.status === "COMPLETED").length },
+    { value: "CANCELLED", label: "Batal", count: orders.filter(o => o.status === "CANCELLED").length },
+  ]
+
+  return (
+    <DashboardLayout role="CANTEEN_OWNER" userName={owner.name} userAvatar={owner.avatar}>
+      <div className="max-w-4xl mx-auto space-y-6 px-1">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Link href="/canteen-owner" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
+            <ArrowLeft className="w-5 h-5 text-slate-600" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Manajemen Order</h1>
+            <p className="text-slate-500 text-sm">{orders.length} total order</p>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Cari order atau nama pelanggan..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {statusFilters.map(filter => (
+            <button
+              key={filter.value}
+              onClick={() => setFilterStatus(filter.value)}
+              className={cn(
+                "px-3 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2",
+                filterStatus === filter.value
+                  ? "bg-blue-500 text-white"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {filter.label}
+              <span className={cn(
+                "px-1.5 py-0.5 rounded-full text-xs",
+                filterStatus === filter.value ? "bg-white/20" : "bg-slate-100"
+              )}>
+                {filter.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Orders List */}
+        <div className="space-y-3">
+          {filteredOrders.map(order => (
+            <GlassCard key={order.id} className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-800">#{order.id.toUpperCase()}</span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1", getStatusColor(order.status))}>
+                      {getStatusIcon(order.status)}
+                      {getStatusLabel(order.status)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">{order.customerName}</p>
+                  <p className="text-xs text-slate-400">
+                    {order.customerRole} • {new Date(order.createdAt).toLocaleString('id-ID')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-slate-800">Rp {order.totalAmount.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{order.items.length} item</p>
+                </div>
+              </div>
+
+              <div className="space-y-1 mb-3 py-3 border-y border-slate-100">
+                {order.items.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">{item.quantity}x {item.productName}</span>
+                    <span className="text-slate-500">Rp {item.price.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              {order.notes && (
+                <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded-lg mb-3">
+                  📝 Catatan: {order.notes}
+                </p>
+              )}
+
+              {order.completedAt && (
+                <p className="text-sm text-green-600 mb-3">
+                  ✓ Selesai: {new Date(order.completedAt).toLocaleString('id-ID')}
+                </p>
+              )}
+
+              {order.status !== "COMPLETED" && order.status !== "CANCELLED" && (
+                <div className="flex gap-2">
+                  {order.status === "PENDING" && (
+                    <>
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, "PREPARING")}
+                        className="flex-1 py-2 px-4 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <ChefHat className="w-4 h-4" />
+                        Proses Order
+                      </button>
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, "CANCELLED")}
+                        className="py-2 px-4 bg-red-100 text-red-600 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  {order.status === "PREPARING" && (
+                    <button
+                      onClick={() => handleUpdateOrderStatus(order.id, "READY")}
+                      className="flex-1 py-2 px-4 bg-green-500 text-white rounded-xl text-sm font-medium hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Siap Diambil
+                    </button>
+                  )}
+                  {order.status === "READY" && (
+                    <button
+                      onClick={() => handleUpdateOrderStatus(order.id, "COMPLETED")}
+                      className="flex-1 py-2 px-4 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Selesai
+                    </button>
+                  )}
+                </div>
+              )}
+            </GlassCard>
+          ))}
+        </div>
+
+        {filteredOrders.length === 0 && (
+          <GlassCard className="p-8 text-center">
+            <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500">Tidak ada order ditemukan</p>
+          </GlassCard>
+        )}
+      </div>
+    </DashboardLayout>
+  )
+}

@@ -1,0 +1,311 @@
+"use client"
+
+import { useState, useEffect, useCallback, useRef } from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
+import { 
+  Home, 
+  LayoutGrid, 
+  User, 
+  BarChart3, 
+  Users, 
+  BookOpen, 
+  LogOut, 
+  Menu, 
+  FileText, 
+  AlertTriangle, 
+  ChevronRight, 
+  Settings, 
+  Wallet, 
+  Award, 
+  Package, 
+  ShoppingBag, 
+  TrendingUp, 
+  Utensils,
+  Calendar,
+  QrCode,
+  Store,
+  GraduationCap,
+  X
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
+import { toast } from "sonner"
+import type { UserRole } from "@/lib/mock-data"
+import { BottomSheet, BottomSheetHandle } from "@/components/organisms/bottom-sheet"
+
+interface BottomNavigationProps {
+  role: UserRole
+  userName?: string
+  userAvatar?: string
+}
+
+export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigationProps) => {
+  const pathname = usePathname()
+  const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
+  const { logout } = useAuth()
+
+  // Main bottom nav items (limited to 4)
+  const getNavItems = () => {
+    switch (role) {
+      case "STUDENT":
+        return [
+          { href: "/student", icon: Home, label: "Home" },
+          { href: "/student/class", icon: LayoutGrid, label: "Kelas" },
+          { href: "/student/assignments", icon: FileText, label: "Tugas" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "EMPLOYEE":
+        return [
+          { href: "/employee", icon: Home, label: "Home" },
+          { href: "/employee/assignments", icon: FileText, label: "Tugas" },
+          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "ADMIN":
+        return [
+          { href: "/admin", icon: Home, label: "Home" },
+          { href: "/admin/class", icon: LayoutGrid, label: "Kelas" },
+          { href: "/admin/scan", icon: QrCode, label: "Scan" },
+          { href: "/admin/users", icon: Users, label: "Users" },
+        ]
+      case "SUPER_ADMIN":
+        return [
+          { href: "/super-admin", icon: Home, label: "Home" },
+          { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
+          { href: "/super-admin/staff", icon: Users, label: "Staff" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "PARENT":
+        return [
+          { href: "/parent", icon: Home, label: "Home" },
+          { href: "/parent/class", icon: LayoutGrid, label: "Kelas" },
+          { href: "/parent/finance", icon: Wallet, label: "Keuangan" },
+          { href: "/parent/grades", icon: BookOpen, label: "Nilai" },
+        ]
+      case "CANTEEN_OWNER":
+        return [
+          { href: "/canteen-owner", icon: Home, label: "Home" },
+          { href: "/canteen-owner/products", icon: Package, label: "Produk" },
+          { href: "/canteen-owner/orders", icon: ShoppingBag, label: "Order" },
+          { href: "/canteen-owner/finance", icon: TrendingUp, label: "Keuangan" },
+        ]
+      default:
+        return []
+    }
+  }
+
+  // All menu items in drawer (same as desktop sidebar)
+  const getAllMenuItems = () => {
+    switch (role) {
+      case "STUDENT":
+        return [
+          { href: "/student", icon: Home, label: "Dashboard" },
+          { href: "/student/class", icon: LayoutGrid, label: "Kelas" },
+          { href: "/student/assignments", icon: FileText, label: "Tugas" },
+          { href: "/student/report", icon: AlertTriangle, label: "Laporan Aset" },
+          { href: "/student/schedule", icon: Calendar, label: "Jadwal" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "EMPLOYEE":
+        return [
+          { href: "/employee", icon: Home, label: "Dashboard" },
+          { href: "/employee/assignments", icon: FileText, label: "Kelola Tugas" },
+          { href: "/employee/schedule", icon: Calendar, label: "Jadwal" },
+          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas" },
+          { href: "/employee/rapor", icon: BookOpen, label: "AI Rapor" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "ADMIN":
+        return [
+          { href: "/admin", icon: Home, label: "Dashboard" },
+          { href: "/admin/class", icon: LayoutGrid, label: "Manajemen Kelas" },
+          { href: "/admin/scan", icon: QrCode, label: "Scan Aset" },
+          { href: "/admin/users", icon: Users, label: "Data Pengguna" },
+          { href: "/admin/canteen", icon: Store, label: "Kelola Kantin" },
+          { href: "/admin/reports", icon: FileText, label: "Laporan" },
+          { href: "/admin/schedule", icon: Calendar, label: "Jadwal" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "SUPER_ADMIN":
+        return [
+          { href: "/super-admin", icon: Home, label: "Dashboard" },
+          { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
+          { href: "/super-admin/staff", icon: Users, label: "Manajemen Staff" },
+          { href: "/super-admin/users", icon: Settings, label: "Pengaturan" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
+        ]
+      case "PARENT":
+        return [
+          { href: "/parent", icon: Home, label: "Dashboard" },
+          { href: "/parent/class", icon: LayoutGrid, label: "Kelas Anak" },
+          { href: "/parent/finance", icon: Wallet, label: "Keuangan" },
+          { href: "/parent/attendance", icon: Calendar, label: "Kehadiran" },
+          { href: "/parent/points", icon: Award, label: "Poin Aktivitas" },
+          { href: "/parent/grades", icon: BookOpen, label: "Nilai" },
+          { href: "/parent/schedule", icon: Calendar, label: "Jadwal Anak" },
+        ]
+      case "CANTEEN_OWNER":
+        return [
+          { href: "/canteen-owner", icon: Home, label: "Dashboard" },
+          { href: "/canteen-owner/products", icon: Package, label: "Produk" },
+          { href: "/canteen-owner/orders", icon: ShoppingBag, label: "Order" },
+          { href: "/canteen-owner/finance", icon: TrendingUp, label: "Keuangan" },
+        ]
+      default:
+        return []
+    }
+  }
+
+  const navItems = getNavItems()
+  const allMenuItems = getAllMenuItems()
+
+  const handleLogout = () => {
+    setIsOpen(false)
+    setTimeout(() => {
+      logout()
+      toast.success("Logout berhasil!", {
+        description: "Sampai jumpa lagi 👋",
+      })
+    }, 300)
+  }
+
+  const handleProfileClick = () => {
+    router.push(`/${role.toLowerCase().replace('_', '-')}/profile`)
+    setIsOpen(false)
+  }
+
+  const roleLabels: Record<UserRole, string> = {
+    STUDENT: "Siswa",
+    EMPLOYEE: "Guru",
+    ADMIN: "Admin",
+    SUPER_ADMIN: "Kepala Sekolah",
+    PARENT: "Orang Tua",
+    CANTEEN_OWNER: "Pemilik Kantin",
+  }
+
+  const roleColors: Record<UserRole, string> = {
+    STUDENT: "from-blue-500 to-cyan-500",
+    EMPLOYEE: "from-emerald-500 to-teal-500",
+    ADMIN: "from-orange-500 to-amber-500",
+    SUPER_ADMIN: "from-purple-500 to-indigo-500",
+    PARENT: "from-pink-500 to-rose-500",
+    CANTEEN_OWNER: "from-orange-500 to-red-500",
+  }
+
+  return (
+    <>
+      {/* Bottom Sheet Menu - Always from bottom */}
+      <BottomSheet open={isOpen} onOpenChange={setIsOpen}>
+        <BottomSheetHandle />
+        
+        <div className="px-4 pb-6 overflow-y-auto max-h-[80vh]">
+          {/* User Profile Card */}
+          <button
+            onClick={handleProfileClick}
+            className="flex items-center gap-4 w-full p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 hover:from-slate-100 hover:to-slate-150 transition-all duration-200 active:scale-[0.98] mb-4"
+          >
+            <div className="relative">
+              <img
+                src={userAvatar || "/placeholder.svg?height=56&width=56"}
+                alt={userName || "User"}
+                className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white shadow-lg"
+              />
+              <div className={cn(
+                "absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center ring-2 ring-white",
+                roleColors[role]
+              )}>
+                <div className="w-2 h-2 bg-white rounded-full" />
+              </div>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold text-slate-900 text-lg leading-tight">{userName || "User"}</p>
+              <p className="text-sm text-slate-500 mt-0.5">{roleLabels[role]}</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400" />
+          </button>
+
+          {/* Navigation Menu Items */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {allMenuItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "flex flex-col items-center gap-2 p-3 rounded-2xl transition-all duration-200 active:scale-[0.95]",
+                    isActive
+                      ? "bg-blue-50 text-blue-600"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-600"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    isActive 
+                      ? "bg-blue-100 text-blue-600" 
+                      : "bg-white text-slate-500 shadow-sm"
+                  )}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-medium text-center leading-tight">{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Divider */}
+          <div className="h-px bg-slate-100 my-4" />
+
+          {/* Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-3 w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border border-red-100 text-red-600 font-semibold transition-all duration-200 active:scale-[0.98]"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Keluar dari Akun</span>
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Bottom Navigation Bar */}
+      <nav className="fixed bottom-4 left-4 right-4 md:hidden z-40">
+        <div className="bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-200/60 border border-slate-100 rounded-2xl px-2 py-2">
+          <div className="flex items-center justify-around">
+            {navItems.slice(0, 4).map((item) => {
+              const isActive = pathname === item.href
+              const Icon = item.icon
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all duration-300",
+                    isActive
+                      ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/30"
+                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 active:scale-95",
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-[10px] font-medium">{item.label}</span>
+                </Link>
+              )
+            })}
+
+            <button
+              onClick={() => setIsOpen(true)}
+              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all duration-300 active:scale-95"
+            >
+              <Menu className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Menu</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+    </>
+  )
+}

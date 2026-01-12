@@ -1,0 +1,273 @@
+"use client"
+
+import { useState } from "react"
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { GlassCard } from "@/components/molecules/glass-card"
+import { GlassInput } from "@/components/atoms/glass-input"
+import { GlassModal } from "@/components/molecules/glass-modal"
+import {
+  mockAdmins,
+  mockStudents,
+  mockEmployees,
+  mockSuperAdmins,
+  type User,
+  type Student,
+  type Employee,
+} from "@/lib/mock-data"
+import {
+  Search,
+  Filter,
+  GraduationCap,
+  Briefcase,
+  Shield,
+  Crown,
+  Eye,
+  Users,
+} from "lucide-react"
+
+type UserType = "all" | "students" | "employees" | "admins"
+
+export default function AdminUsersPage() {
+  const admin = mockAdmins[0]
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedFilter, setSelectedFilter] = useState<UserType>("all")
+  const [selectedUser, setSelectedUser] = useState<User | Student | Employee | null>(null)
+  const [showUserModal, setShowUserModal] = useState(false)
+
+  const filters: { id: UserType; label: string; icon: typeof GraduationCap; count: number }[] = [
+    {
+      id: "all",
+      label: "All",
+      icon: Filter,
+      count: mockStudents.length + mockEmployees.length + mockAdmins.length + mockSuperAdmins.length,
+    },
+    { id: "students", label: "Students", icon: GraduationCap, count: mockStudents.length },
+    { id: "employees", label: "Teachers", icon: Briefcase, count: mockEmployees.length },
+    { id: "admins", label: "Staff", icon: Shield, count: mockAdmins.length + mockSuperAdmins.length },
+  ]
+
+  const getFilteredUsers = () => {
+    let users: (User | Student | Employee)[] = []
+
+    switch (selectedFilter) {
+      case "students":
+        users = mockStudents
+        break
+      case "employees":
+        users = mockEmployees
+        break
+      case "admins":
+        users = [...mockAdmins, ...mockSuperAdmins]
+        break
+      default:
+        users = [...mockStudents, ...mockEmployees, ...mockAdmins, ...mockSuperAdmins]
+    }
+
+    if (searchQuery) {
+      users = users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          u.email.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    }
+
+    return users
+  }
+
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case "STUDENT":
+        return <GraduationCap className="w-3 h-3 sm:w-4 sm:h-4" />
+      case "EMPLOYEE":
+        return <Briefcase className="w-3 h-3 sm:w-4 sm:h-4" />
+      case "ADMIN":
+        return <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
+      case "SUPER_ADMIN":
+        return <Crown className="w-3 h-3 sm:w-4 sm:h-4" />
+      default:
+        return null
+    }
+  }
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case "STUDENT":
+        return "bg-blue-100 text-blue-700 border-blue-200"
+      case "EMPLOYEE":
+        return "bg-green-100 text-green-700 border-green-200"
+      case "ADMIN":
+        return "bg-orange-100 text-orange-700 border-orange-200"
+      case "SUPER_ADMIN":
+        return "bg-purple-100 text-purple-700 border-purple-200"
+      default:
+        return "bg-gray-100 text-gray-700 border-gray-200"
+    }
+  }
+
+  const users = getFilteredUsers()
+
+  return (
+    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
+      <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Daftar Pengguna</h1>
+            <p className="text-sm sm:text-base text-slate-500">Lihat semua pengguna sistem</p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+            <Users className="w-4 h-4 text-blue-600" />
+            <span className="text-sm text-slate-700 font-medium">Total: {mockStudents.length + mockEmployees.length + mockAdmins.length + mockSuperAdmins.length}</span>
+          </div>
+        </div>
+
+        {/* Search */}
+        <GlassCard>
+          <div className="relative">
+            <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
+            <GlassInput
+              placeholder="Cari pengguna..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 sm:pl-12 text-sm sm:text-base"
+            />
+          </div>
+        </GlassCard>
+
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          {filters.map((filter) => {
+            const Icon = filter.icon
+            return (
+              <button
+                key={filter.id}
+                onClick={() => setSelectedFilter(filter.id)}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  selectedFilter === filter.id
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25"
+                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">{filter.label}</span>
+                <span className={`ml-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs ${selectedFilter === filter.id ? "bg-white/20" : "bg-slate-100"}`}>
+                  {filter.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Users List */}
+        <GlassCard>
+          <div className="space-y-2 sm:space-y-3">
+            {users.length === 0 ? (
+              <div className="text-center py-8 sm:py-12">
+                <p className="text-sm sm:text-base text-slate-500">Tidak ada pengguna ditemukan</p>
+              </div>
+            ) : (
+              users.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={user.avatar || "/placeholder.svg?height=48&width=48&query=user portrait"}
+                      alt={user.name}
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-200 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-800 text-sm sm:text-base truncate">{user.name}</p>
+                      <p className="text-xs sm:text-sm text-slate-500 truncate">{user.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                    <span
+                      className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs border ${getRoleColor(user.role)}`}
+                    >
+                      {getRoleIcon(user.role)}
+                      <span className="hidden xs:inline">{user.role.replace("_", " ")}</span>
+                    </span>
+
+                    <button
+                      onClick={() => {
+                        setSelectedUser(user)
+                        setShowUserModal(true)
+                      }}
+                      className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                    >
+                      <Eye className="w-4 h-4 text-slate-600" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </GlassCard>
+
+        {/* User Detail Modal */}
+        <GlassModal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title="Detail Pengguna">
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <img
+                  src={selectedUser.avatar || "/placeholder.svg?height=80&width=80&query=user portrait"}
+                  alt={selectedUser.name}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-slate-200"
+                />
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 truncate">{selectedUser.name}</h3>
+                  <p className="text-sm text-slate-500 truncate">{selectedUser.email}</p>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs border mt-2 ${getRoleColor(selectedUser.role)}`}
+                  >
+                    {getRoleIcon(selectedUser.role)}
+                    {selectedUser.role.replace("_", " ")}
+                  </span>
+                </div>
+              </div>
+
+              {"coins" in selectedUser && (
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Koin</p>
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.coins}</p>
+                  </div>
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Level</p>
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.level}</p>
+                  </div>
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Pembayaran</p>
+                    <p
+                      className={`font-semibold text-sm sm:text-base ${selectedUser.paymentStatus === "PAID" ? "text-green-600" : "text-red-500"}`}
+                    >
+                      {selectedUser.paymentStatus}
+                    </p>
+                  </div>
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Perilaku</p>
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.behaviorScore}</p>
+                  </div>
+                </div>
+              )}
+
+              {"subject" in selectedUser && (
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Mata Pelajaran</p>
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.subject}</p>
+                  </div>
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] sm:text-xs text-slate-500">Rating</p>
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.rating}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </GlassModal>
+      </div>
+    </DashboardLayout>
+  )
+}

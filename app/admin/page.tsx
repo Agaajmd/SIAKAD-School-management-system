@@ -1,0 +1,313 @@
+"use client"
+
+import { useState } from "react"
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { GlassCard } from "@/components/molecules/glass-card"
+import { GlassModal } from "@/components/molecules/glass-modal"
+import { mockAdmins, mockStudents, mockEmployees, mockClasses } from "@/lib/mock-data"
+import { 
+  AlertTriangle, 
+  Wrench, 
+  FileText, 
+  ClipboardList,
+  CheckCircle,
+  Clock,
+  PackageCheck,
+  Activity,
+  QrCode,
+  Users
+} from "lucide-react"
+import Link from "next/link"
+import { toast } from "sonner"
+
+// Mock reports data for operator
+const mockReports = [
+  { id: "r1", type: "damage", title: "AC Rusak di Kelas 10-A", status: "pending", date: "2025-12-20", reporter: "Pak Ahmad", priority: "high" },
+  { id: "r2", type: "facility", title: "Proyektor Mati di Lab", status: "in-progress", date: "2025-12-19", reporter: "Bu Sri", priority: "medium" },
+  { id: "r3", type: "damage", title: "Kursi Patah Ruang 102", status: "resolved", date: "2025-12-18", reporter: "Pak Budi", priority: "low" },
+  { id: "r4", type: "facility", title: "Kebocoran Atap Aula", status: "pending", date: "2025-12-17", reporter: "Bu Maria", priority: "high" },
+  { id: "r5", type: "damage", title: "Papan Tulis Retak", status: "pending", date: "2025-12-16", reporter: "Pak Joko", priority: "medium" },
+]
+
+// Mock inventory data
+const mockInventory = [
+  { id: "i1", name: "Proyektor", total: 25, working: 22, broken: 3 },
+  { id: "i2", name: "AC", total: 40, working: 38, broken: 2 },
+  { id: "i3", name: "Komputer Lab", total: 60, working: 55, broken: 5 },
+  { id: "i4", name: "Meja Siswa", total: 500, working: 485, broken: 15 },
+]
+
+export default function AdminDashboard() {
+  const admin = mockAdmins[0]
+  const [reports, setReports] = useState(mockReports)
+  const [selectedReport, setSelectedReport] = useState<typeof mockReports[0] | null>(null)
+  const [activeTab, setActiveTab] = useState<"reports" | "inventory">("reports")
+
+  const pendingReports = reports.filter(r => r.status === "pending")
+  const inProgressReports = reports.filter(r => r.status === "in-progress")
+  const resolvedReports = reports.filter(r => r.status === "resolved")
+
+  const stats = [
+    { icon: AlertTriangle, label: "Laporan Pending", value: pendingReports.length, color: "text-orange-500", bgColor: "bg-orange-50" },
+    { icon: Activity, label: "Sedang Diproses", value: inProgressReports.length, color: "text-blue-500", bgColor: "bg-blue-50" },
+    { icon: CheckCircle, label: "Selesai", value: resolvedReports.length, color: "text-green-500", bgColor: "bg-green-50" },
+    { icon: PackageCheck, label: "Total Aset", value: mockInventory.reduce((acc, i) => acc + i.total, 0), color: "text-purple-500", bgColor: "bg-purple-50" },
+  ]
+
+  const quickActions = [
+    { href: "/admin/scan", icon: QrCode, label: "Scan QR Aset", description: "Scan dan laporkan masalah aset", color: "bg-blue-500" },
+    { href: "/admin/users", icon: Users, label: "Data Pengguna", description: "Lihat dan kelola data pengguna", color: "bg-emerald-500" },
+  ]
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "pending": return "bg-orange-100 text-orange-800 border-orange-300"
+      case "in-progress": return "bg-blue-100 text-blue-800 border-blue-300"
+      case "resolved": return "bg-green-100 text-green-800 border-green-300"
+      default: return "bg-gray-100 text-gray-800 border-gray-300"
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "high": return "bg-red-100 text-red-800"
+      case "medium": return "bg-amber-100 text-amber-800"
+      case "low": return "bg-slate-200 text-slate-700"
+      default: return "bg-slate-200 text-slate-700"
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "pending": return "Menunggu"
+      case "in-progress": return "Diproses"
+      case "resolved": return "Selesai"
+      default: return status
+    }
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case "damage": return <Wrench className="w-4 h-4" />
+      case "facility": return <ClipboardList className="w-4 h-4" />
+      default: return <FileText className="w-4 h-4" />
+    }
+  }
+
+  const handleUpdateStatus = (reportId: string, newStatus: string) => {
+    setReports(reports.map(r => r.id === reportId ? { ...r, status: newStatus } : r))
+    setSelectedReport(null)
+    toast.success("Status laporan diperbarui", {
+      description: `Laporan telah diubah ke status "${getStatusLabel(newStatus)}"`,
+    })
+  }
+
+  return (
+    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">
+                Operator
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800">Dashboard Sarana Prasarana</h1>
+            <p className="text-slate-500">Kelola fasilitas dan aset sekolah</p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {stats.map((stat) => {
+            const Icon = stat.icon
+            return (
+              <div key={stat.label} className={`${stat.bgColor} rounded-2xl p-4 border border-slate-100`}>
+                <Icon className={`w-5 h-5 ${stat.color} mb-2`} />
+                <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
+                <p className="text-xs text-slate-600">{stat.label}</p>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          {quickActions.map((action) => {
+            const Icon = action.icon
+            return (
+              <Link key={action.href} href={action.href}>
+                <div className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-slate-300 hover:shadow-md transition-all duration-200">
+                  <div className={`p-3 ${action.color} rounded-xl`}>
+                    <Icon className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800">{action.label}</h3>
+                    <p className="text-sm text-slate-500">{action.description}</p>
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+          <button
+            onClick={() => setActiveTab("reports")}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "reports" 
+                ? "bg-white text-slate-800 shadow-sm" 
+                : "text-slate-600 hover:text-slate-800"
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4 inline mr-2" />
+            Laporan ({reports.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("inventory")}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "inventory" 
+                ? "bg-white text-slate-800 shadow-sm" 
+                : "text-slate-600 hover:text-slate-800"
+            }`}
+          >
+            <PackageCheck className="w-4 h-4 inline mr-2" />
+            Inventaris
+          </button>
+        </div>
+
+        {/* Reports Tab Content */}
+        {activeTab === "reports" && (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-slate-600" />
+                Laporan Terbaru
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {reports.map((report) => (
+                <div 
+                  key={report.id} 
+                  className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => setSelectedReport(report)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+                      {getTypeIcon(report.type)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800 text-sm truncate">{report.title}</p>
+                      <p className="text-xs text-slate-500">{report.reporter} • {report.date}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`px-2 py-1 text-[10px] font-medium rounded-full ${getPriorityColor(report.priority)}`}>
+                      {report.priority === "high" ? "Tinggi" : report.priority === "medium" ? "Sedang" : "Rendah"}
+                    </span>
+                    <span className={`px-2 py-1 text-[10px] font-medium rounded-full border ${getStatusColor(report.status)}`}>
+                      {getStatusLabel(report.status)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Inventory Tab Content */}
+        {activeTab === "inventory" && (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <PackageCheck className="w-5 h-5 text-slate-600" />
+                Status Inventaris
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {mockInventory.map((item) => (
+                <div key={item.id} className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-slate-800">{item.name}</p>
+                    <p className="text-sm text-slate-500">Total: {item.total}</p>
+                  </div>
+                  <div className="flex gap-4 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-slate-600">Baik: {item.working}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      <span className="text-slate-600">Rusak: {item.broken}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-green-500 rounded-full" 
+                      style={{ width: `${(item.working / item.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Report Detail Modal */}
+      <GlassModal isOpen={!!selectedReport} onClose={() => setSelectedReport(null)} title="Detail Laporan">
+        {selectedReport && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-3 bg-slate-100 rounded-xl text-slate-600">
+                {getTypeIcon(selectedReport.type)}
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-800">{selectedReport.title}</h3>
+                <p className="text-sm text-slate-500">{selectedReport.reporter} • {selectedReport.date}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <span className={`px-3 py-1.5 text-xs font-medium rounded-full ${getPriorityColor(selectedReport.priority)}`}>
+                Prioritas: {selectedReport.priority === "high" ? "Tinggi" : selectedReport.priority === "medium" ? "Sedang" : "Rendah"}
+              </span>
+              <span className={`px-3 py-1.5 text-xs font-medium rounded-full border ${getStatusColor(selectedReport.status)}`}>
+                {getStatusLabel(selectedReport.status)}
+              </span>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-sm text-slate-600 mb-3">Ubah Status:</p>
+              <div className="flex gap-2 flex-wrap">
+                <button 
+                  onClick={() => handleUpdateStatus(selectedReport.id, "pending")}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Clock className="w-4 h-4" />
+                  Menunggu
+                </button>
+                <button 
+                  onClick={() => handleUpdateStatus(selectedReport.id, "in-progress")}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Wrench className="w-4 h-4" />
+                  Proses
+                </button>
+                <button 
+                  onClick={() => handleUpdateStatus(selectedReport.id, "resolved")}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Selesai
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </GlassModal>
+    </DashboardLayout>
+  )
+}
