@@ -274,12 +274,12 @@ export default function EmployeeClassClient({ id }: ClientPageProps) {
         <ClassRoomGrid classroom={classroom} students={students} onAttendanceChange={handleAttendanceChange} />
 
         <GlassCard className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold text-slate-800">CRUD Akun Orang Tua</h2>
-              <p className="text-sm text-slate-500">Wali kelas: {homeroomTeacherName} • Kelas: {classroom.name}</p>
+              <p className="text-sm text-slate-500 break-words">Wali kelas: {homeroomTeacherName} • Kelas: {classroom.name}</p>
             </div>
-            <GlassButton onClick={openCreateParentModal}>
+            <GlassButton onClick={openCreateParentModal} className="w-full sm:w-auto justify-center">
               <Plus className="w-4 h-4 mr-2" />
               Tambah Orang Tua
             </GlassButton>
@@ -294,19 +294,19 @@ export default function EmployeeClassClient({ id }: ClientPageProps) {
               classParents.map((parent) => {
                 const child = students.find((student) => parent.childrenIds.includes(student.id))
                 return (
-                  <div key={parent.id} className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-800">{parent.name}</p>
-                      <p className="text-sm text-slate-500">{parent.email}</p>
-                      <p className="text-xs text-slate-500 mt-1">Anak: {child?.name || "-"} • Kelas: {classroom.name}</p>
+                  <div key={parent.id} className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800 break-words">{parent.name}</p>
+                      <p className="text-sm text-slate-600 break-all">{parent.email}</p>
+                      <p className="text-xs text-slate-500 mt-1 break-words">Anak: {child?.name || "-"} • Kelas: {classroom.name}</p>
                     </div>
-                    <div className="flex gap-2">
-                      <GlassButton variant="secondary" onClick={() => openEditParentModal(parent)}>
+                    <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex">
+                      <GlassButton variant="secondary" className="justify-center" onClick={() => openEditParentModal(parent)}>
                         <Edit2 className="w-4 h-4 mr-1" />
                         Edit
                       </GlassButton>
                       <GlassButton
-                        className="bg-red-500 hover:bg-red-600 text-white"
+                        className="bg-red-600 hover:bg-red-700 text-white justify-center"
                         onClick={() => {
                           setSelectedParent(parent)
                           setShowDeleteParentModal(true)

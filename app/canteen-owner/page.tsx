@@ -130,9 +130,9 @@ export default function CanteenOwnerDashboard() {
               <div className="p-2.5 rounded-xl bg-green-100">
                 <Wallet className="w-5 h-5 text-green-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">Rp {todayRevenue.toLocaleString()}</p>
-                <p className="text-xs text-slate-500">Pendapatan Hari Ini</p>
+              <div className="min-w-0">
+                <p className="text-lg sm:text-2xl font-bold text-slate-800 break-words">Rp {todayRevenue.toLocaleString()}</p>
+                <p className="text-xs text-slate-600">Pendapatan Hari Ini</p>
               </div>
             </div>
           </GlassCard>
@@ -168,9 +168,9 @@ export default function CanteenOwnerDashboard() {
                 <div className="p-2.5 rounded-xl bg-emerald-100">
                   <Package className="w-5 h-5 text-emerald-600" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-slate-700">Kelola Produk</p>
-                  <p className="text-xs text-slate-500">{products.length} produk</p>
+                  <p className="text-xs text-slate-600">{products.length} produk</p>
                 </div>
               </div>
             </GlassCard>
@@ -181,9 +181,9 @@ export default function CanteenOwnerDashboard() {
                 <div className="p-2.5 rounded-xl bg-indigo-100">
                   <TrendingUp className="w-5 h-5 text-indigo-600" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-slate-700">Keuangan</p>
-                  <p className="text-xs text-slate-500">Lihat laporan</p>
+                  <p className="text-xs text-slate-600">Lihat laporan</p>
                 </div>
               </div>
             </GlassCard>
@@ -227,9 +227,9 @@ export default function CanteenOwnerDashboard() {
                         {getStatusLabel(order.status)}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-500 mt-1">{order.customerName} • {order.customerRole}</p>
+                    <p className="text-sm text-slate-600 mt-1 break-words">{order.customerName} • {order.customerRole}</p>
                   </div>
-                  <p className="font-bold text-slate-800">Rp {order.totalAmount.toLocaleString()}</p>
+                    <p className="font-bold text-slate-800 text-right">Rp {order.totalAmount.toLocaleString()}</p>
                 </div>
 
                 <div className="space-y-1 mb-3">

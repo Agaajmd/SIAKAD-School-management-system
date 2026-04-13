@@ -189,19 +189,19 @@ export default function AdminCanteenPage() {
     <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
       <div className="max-w-4xl mx-auto space-y-6 px-1">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
             <Link href="/admin" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </Link>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-xl font-bold text-slate-800">Manajemen Kantin</h1>
-              <p className="text-slate-500 text-sm">{canteenOwners.length} pemilik kantin terdaftar</p>
+              <p className="text-slate-600 text-sm break-words">{canteenOwners.length} pemilik kantin terdaftar</p>
             </div>
           </div>
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Tambah
@@ -221,18 +221,18 @@ export default function AdminCanteenPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <GlassCard className="p-4 text-center">
-            <p className="text-2xl font-bold text-slate-800">{canteenOwners.length}</p>
-            <p className="text-sm text-slate-500">Total Kantin</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-800">{canteenOwners.length}</p>
+            <p className="text-xs sm:text-sm text-slate-600">Total Kantin</p>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{canteenOwners.filter(o => o.isActive).length}</p>
-            <p className="text-sm text-slate-500">Aktif</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-700">{canteenOwners.filter(o => o.isActive).length}</p>
+            <p className="text-xs sm:text-sm text-slate-600">Aktif</p>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-600">{canteenOwners.filter(o => !o.isActive).length}</p>
-            <p className="text-sm text-slate-500">Tidak Aktif</p>
+            <p className="text-xl sm:text-2xl font-bold text-red-700">{canteenOwners.filter(o => !o.isActive).length}</p>
+            <p className="text-xs sm:text-sm text-slate-600">Tidak Aktif</p>
           </GlassCard>
         </div>
 
@@ -241,8 +241,8 @@ export default function AdminCanteenPage() {
           {filteredOwners.map(owner => {
             const canteen = canteens.find(c => c.id === owner.canteenId)
             return (
-              <GlassCard key={owner.id} className={cn("p-4", !owner.isActive && "opacity-60")}>
-                <div className="flex items-start gap-4">
+              <GlassCard key={owner.id} className={cn("p-4", !owner.isActive && "opacity-75")}>
+                <div className="flex items-start gap-3 sm:gap-4">
                   <img 
                     src={owner.avatar} 
                     alt={owner.name}
@@ -250,36 +250,38 @@ export default function AdminCanteenPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-semibold text-slate-800">{owner.name}</h3>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-slate-800 break-words">{owner.name}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <Store className="w-4 h-4 text-slate-400" />
-                          <span className="text-sm text-slate-600">{owner.canteenName}</span>
+                          <Store className="w-4 h-4 text-slate-500 shrink-0" />
+                          <span className="text-sm text-slate-700 break-words">{owner.canteenName}</span>
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <button
                           onClick={() => handleOpenModal(owner)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                          aria-label={`Edit ${owner.name}`}
                         >
-                          <Edit2 className="w-4 h-4 text-slate-500" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(owner.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-100 transition-colors"
+                          className="p-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                          aria-label={`Hapus ${owner.name}`}
                         >
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5" />
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-sm text-slate-600">
+                      <span className="flex items-center gap-1 min-w-0">
+                        <Mail className="w-3.5 h-3.5 shrink-0" />
                         {owner.email}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-1 min-w-0 break-words">
+                        <Phone className="w-3.5 h-3.5 shrink-0" />
                         {owner.phone}
                       </span>
                     </div>
@@ -299,8 +301,8 @@ export default function AdminCanteenPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-sm text-slate-600">Status Kantin:</span>
+                <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm text-slate-700">Status Kantin:</span>
                   <button
                     onClick={() => handleToggleActive(owner.id)}
                     className={cn(
@@ -353,7 +355,7 @@ export default function AdminCanteenPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
                 <input
@@ -364,7 +366,6 @@ export default function AdminCanteenPage() {
                   placeholder="email@example.com"
                 />
               </div>
-              <div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Password {editingOwner ? "(opsional)" : "*"}</label>
                 <input
@@ -387,6 +388,8 @@ export default function AdminCanteenPage() {
                 placeholder="081234567890"
               />
             </div>
+
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Nama Kantin *</label>
               <input
                 type="text"
@@ -434,7 +437,7 @@ export default function AdminCanteenPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                className="flex-1 py-2.5 px-4 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors"
+                className="flex-1 py-2.5 px-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
               >
                 {editingOwner ? "Simpan" : "Tambah"}
               </button>
