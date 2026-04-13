@@ -394,7 +394,6 @@ const FeaturesSection = memo(function FeaturesSection() {
     <section id="features" className="perf-scroll-section py-16 sm:py-20 lg:py-32 relative bg-white/40">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-          <SectionBadge>Fitur Unggulan</SectionBadge>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 sm:mb-6">
             Semua yang Anda Butuhkan
           </h2>
@@ -425,7 +424,6 @@ const TestimonialsSection = memo(function TestimonialsSection() {
     <section id="testimonials" className="perf-scroll-section py-16 sm:py-20 lg:py-32 relative bg-blue-50/40">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-          <SectionBadge>Testimoni</SectionBadge>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 sm:mb-6">
             Apa Kata Mereka
           </h2>
