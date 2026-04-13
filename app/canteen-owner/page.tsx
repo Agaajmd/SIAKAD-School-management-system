@@ -1,18 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockCanteenOwners,
-  mockCanteens,
-  mockProducts,
-  mockOrders,
-  getProductsByCanteen,
-  getOrdersByCanteen,
-  type Order,
-  type OrderStatus,
-} from "@/lib/mock-data"
 import { 
   Package,
   ShoppingBag,
@@ -30,11 +20,50 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+type OrderStatus = "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED"
+type Owner = { id: string; name: string; avatar: string; canteenId: string }
+type Canteen = { id: string; name: string; isOpen: boolean; rating: number }
+type Product = { id: string; canteenId: string; isAvailable: boolean }
+type Order = {
+  id: string
+  canteenId: string
+  status: OrderStatus
+  totalAmount: number
+  createdAt: string
+  customerName: string
+  customerRole: string
+  items: Array<{ productName: string; quantity: number; price: number }>
+  notes?: string
+}
+
 export default function CanteenOwnerDashboard() {
-  const owner = mockCanteenOwners[0] // Demo: First canteen owner
-  const canteen = mockCanteens.find(c => c.id === owner.canteenId)
-  const products = getProductsByCanteen(owner.canteenId)
-  const [orders, setOrders] = useState<Order[]>(getOrdersByCanteen(owner.canteenId))
+  const [owner, setOwner] = useState<Owner>({ id: "", name: "Owner", avatar: "/placeholder-user.jpg", canteenId: "" })
+  const [canteen, setCanteen] = useState<Canteen | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/canteen-owner", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.owner) setOwner(data.owner)
+        setCanteen(data.canteen || null)
+        if (Array.isArray(data.products)) setProducts(data.products)
+        if (Array.isArray(data.orders)) setOrders(data.orders)
+      } catch {
+        // Keep fallback empty state when API is unavailable.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Calculate statistics
   const todayOrders = orders.filter(o => o.createdAt.startsWith("2025-12-30"))

@@ -4,13 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { mockEmployees, mockClasses, type Task, type TaskSubmission } from "@/lib/mock-data"
-import {
-  getStoredTaskSubmissions,
-  getStoredTasks,
-  setStoredTaskSubmissions,
-  setStoredTasks,
-} from "@/lib/task-storage"
 import {
   FileText,
   Plus,
@@ -25,9 +18,38 @@ import {
   Link2,
   Image as ImageIcon,
   Upload,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+
+type Task = {
+  id: string
+  title: string
+  description: string
+  subject: string
+  classId: string
+  teacherId: string
+  dueDate: string
+  createdAt: string
+  attachmentUrl?: string
+  attachmentName?: string
+  imageUrl?: string
+  maxScore: number
+}
+
+type TaskSubmission = {
+  id: string
+  taskId: string
+  studentId: string
+  submittedAt: string
+  attachmentUrl?: string
+  imageUrl?: string
+  attachmentName?: string
+  score?: number
+  feedback?: string
+  status: "PENDING" | "SUBMITTED" | "GRADED" | "LATE"
+}
 
 type TabType = "active" | "past"
 
@@ -40,7 +62,8 @@ const fileToDataUrl = (file: File) =>
   })
 
 export default function EmployeeAssignmentsPage() {
-  const employee = mockEmployees[0]
+  const [employee, setEmployee] = useState({ id: "", subject: "-" })
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([])
   const [activeTab, setActiveTab] = useState<TabType>("active")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
@@ -48,12 +71,13 @@ export default function EmployeeAssignmentsPage() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     subject: employee.subject,
-    classId: "c1",
+    classId: "",
     dueDate: "",
     maxScore: 100,
     attachmentUrl: "",
@@ -62,9 +86,34 @@ export default function EmployeeAssignmentsPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
 
   useEffect(() => {
-    setAllTasks(getStoredTasks())
-    setAllSubmissions(getStoredTaskSubmissions())
-  }, [])
+    const load = async () => {
+      try {
+        const contextRes = await fetch("/api/employee/context", { cache: "no-store" })
+        if (contextRes.ok) {
+          const contextData = await contextRes.json()
+          const nextEmployee = contextData.employee || { id: "", subject: "-" }
+          const nextClasses = Array.isArray(contextData.classes) ? contextData.classes : []
+          setEmployee(nextEmployee)
+          setClasses(nextClasses)
+          setFormData((prev) => ({
+            ...prev,
+            subject: nextEmployee.subject || "-",
+            classId: prev.classId || nextClasses[0]?.id || "",
+          }))
+        }
+
+        const res = await fetch(`/api/employee/tasks?teacherId=${employee.id}`, { cache: "no-store" })
+        if (!res.ok) throw new Error("Gagal memuat tugas")
+        const data = await res.json()
+        setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
+        setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+      } catch {
+        toast.error("Gagal memuat data tugas")
+      }
+    }
+
+    load()
+  }, [employee.id])
 
   const teacherTasks = useMemo(
     () => allTasks.filter((task) => task.teacherId === employee.id),
@@ -99,7 +148,7 @@ export default function EmployeeAssignmentsPage() {
       title: "",
       description: "",
       subject: employee.subject,
-      classId: "c1",
+      classId: classes[0]?.id || "",
       dueDate: "",
       maxScore: 100,
       attachmentUrl: "",
@@ -165,19 +214,33 @@ export default function EmployeeAssignmentsPage() {
       imageUrl,
     }
 
-    const nextTasks = editingTaskId
-      ? allTasks.map((task) => (task.id === editingTaskId ? nextTask : task))
-      : [nextTask, ...allTasks]
+    setIsSubmitting(true)
+    try {
+      const res = await fetch("/api/employee/tasks", {
+        method: editingTaskId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextTask),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan tugas")
 
-    setAllTasks(nextTasks)
-    setStoredTasks(nextTasks)
+      setAllTasks((prev) =>
+        editingTaskId
+          ? prev.map((task) => (task.id === editingTaskId ? data.task : task))
+          : [data.task, ...prev],
+      )
 
-    toast.success(editingTaskId ? "Tugas berhasil diperbarui" : "Tugas berhasil dibuat", {
-      description: nextTask.title,
-    })
+      toast.success(editingTaskId ? "Tugas berhasil diperbarui" : "Tugas berhasil dibuat", {
+        description: nextTask.title,
+      })
 
-    setShowCreateModal(false)
-    resetForm()
+      setShowCreateModal(false)
+      resetForm()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menyimpan tugas")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleEdit = (task: Task) => {
@@ -196,16 +259,21 @@ export default function EmployeeAssignmentsPage() {
     setShowCreateModal(true)
   }
 
-  const handleDelete = (task: Task) => {
-    const nextTasks = allTasks.filter((t) => t.id !== task.id)
-    const nextSubmissions = allSubmissions.filter((s) => s.taskId !== task.id)
+  const handleDelete = async (task: Task) => {
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(`/api/employee/tasks?id=${task.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || "Gagal menghapus tugas")
 
-    setAllTasks(nextTasks)
-    setAllSubmissions(nextSubmissions)
-    setStoredTasks(nextTasks)
-    setStoredTaskSubmissions(nextSubmissions)
-
-    toast.success("Tugas berhasil dihapus", { description: task.title })
+      setAllTasks((prev) => prev.filter((t) => t.id !== task.id))
+      setAllSubmissions((prev) => prev.filter((s) => s.taskId !== task.id))
+      toast.success("Tugas berhasil dihapus", { description: task.title })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menghapus tugas")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleViewSubmissions = (task: Task) => {
@@ -263,7 +331,7 @@ export default function EmployeeAssignmentsPage() {
           ) : (
             getTaskList().map((task) => {
               const stats = getSubmissionStats(task.id)
-              const className = mockClasses.find((c) => c.id === task.classId)?.name || "Unknown"
+              const className = classes.find((c) => c.id === task.classId)?.name || "Unknown"
 
               return (
                 <GlassCard key={task.id}>
@@ -299,7 +367,7 @@ export default function EmployeeAssignmentsPage() {
                       <div className="flex items-center gap-2 mt-3">
                         <button onClick={() => handleViewSubmissions(task)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"><Eye className="w-3.5 h-3.5" /> Lihat Submission</button>
                         <button onClick={() => handleEdit(task)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
-                        <button onClick={() => handleDelete(task)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                        <button onClick={() => handleDelete(task)} disabled={isSubmitting} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-60">{isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus</button>
                       </div>
                     </div>
                   </div>
@@ -324,7 +392,7 @@ export default function EmployeeAssignmentsPage() {
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1.5 block">Kelas</label>
               <select value={formData.classId} onChange={(e) => setFormData({ ...formData, classId: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
-                {mockClasses.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                {classes.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
             </div>
             <div>
@@ -359,7 +427,7 @@ export default function EmployeeAssignmentsPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button onClick={() => { setShowCreateModal(false); resetForm() }} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Batal</button>
-            <button onClick={handleCreateOrUpdate} className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"><Send className="w-4 h-4" /> {editingTaskId ? "Simpan Perubahan" : "Buat Tugas"}</button>
+            <button onClick={handleCreateOrUpdate} disabled={isSubmitting} className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {editingTaskId ? "Simpan Perubahan" : "Buat Tugas"}</button>
           </div>
         </div>
       </GlassModal>

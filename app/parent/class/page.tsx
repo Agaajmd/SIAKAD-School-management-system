@@ -1,17 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents,
-  mockStudents, 
-  mockClasses, 
-  getEmployeeById,
-  getChildrenByParent,
-  type Student 
-} from "@/lib/mock-data"
+import type { Student } from "@/lib/data-model"
 import { 
   Users, 
   GraduationCap, 
@@ -27,15 +20,42 @@ import {
 import { cn } from "@/lib/utils"
 
 export default function ParentClassPage() {
-  // Demo: First parent
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<any>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [childClass, setChildClass] = useState<any>(null)
+  const [classmates, setClassmates] = useState<Student[]>([])
+  const [teacher, setTeacher] = useState<any>(null)
   const [showChildSelector, setShowChildSelector] = useState(false)
 
-  const childClass = mockClasses.find(c => c.id === selectedChild.classId)
-  const classmates = mockStudents.filter(s => s.classId === selectedChild.classId)
-  const teacher = childClass ? getEmployeeById(childClass.teacherId) : undefined
+  useEffect(() => {
+    const load = async () => {
+      const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+      const res = await fetch(`/api/parent/child-overview${query}`, { cache: "no-store" })
+      if (!res.ok) return
+      const data = await res.json()
+      setParent(data.parent || null)
+      setChildren(Array.isArray(data.children) ? data.children : [])
+      if (data.selectedChild) {
+        setSelectedChild(data.selectedChild)
+      }
+      setChildClass(data.childClass || null)
+      setClassmates(Array.isArray(data.classmates) ? data.classmates : [])
+      if (Array.isArray(data.teachers) && data.teachers.length > 0) {
+        setTeacher(data.teachers[0])
+      }
+    }
+
+    load()
+  }, [selectedChild?.id])
+
+  if (!parent || !selectedChild) {
+    return (
+      <DashboardLayout role="PARENT" userName="Parent" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto py-8 text-slate-500">Data kelas belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   if (!childClass) {
     return (
@@ -64,9 +84,9 @@ export default function ParentClassPage() {
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5)
   
-  const childRank = [...classmates]
+  const childRank = useMemo(() => [...classmates]
     .sort((a, b) => b.xp - a.xp)
-    .findIndex(s => s.id === selectedChild.id) + 1
+    .findIndex(s => s.id === selectedChild.id) + 1, [classmates, selectedChild.id])
 
   // Attendance status for selected child
   const getAttendanceStatus = () => {
@@ -130,7 +150,7 @@ export default function ParentClassPage() {
                     </div>
                     <div className="p-1">
                       {children.map((child) => {
-                        const cls = mockClasses.find(c => c.id === child.classId)
+                        const cls = child.id === selectedChild.id ? childClass : null
                         const isSelected = child.id === selectedChild.id
                         return (
                           <button

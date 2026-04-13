@@ -1,15 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents,
-  mockClasses,
-  getChildrenByParent,
-  type Student,
-} from "@/lib/mock-data"
-import { getStoredActivityPointsByStudent } from "@/lib/academic-storage"
+import type { ActivityPoint, Parent, Student } from "@/lib/data-model"
 import { 
   ArrowLeft,
   TrendingUp,
@@ -21,12 +15,35 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function ParentPointsPage() {
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<Parent | null>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [activityPoints, setActivityPoints] = useState<ActivityPoint[]>([])
   const [filterType, setFilterType] = useState<string>("all")
+  const [childClassName, setChildClassName] = useState("")
 
-  const activityPoints = getStoredActivityPointsByStudent(selectedChild.id)
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+        const res = await fetch(`/api/parent/child-overview${query}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        setParent(data.parent || null)
+        setChildren(data.children || [])
+        if (data.selectedChild) setSelectedChild(data.selectedChild)
+        setActivityPoints(data.activityPoints || [])
+        setChildClassName(data.childClass?.name || data.selectedChild?.classId || "-")
+      } catch {
+        setParent(null)
+      }
+    }
+
+    fetchOverview()
+  }, [selectedChild?.id])
+
   const filteredPoints = filterType === "all" 
     ? activityPoints 
     : activityPoints.filter(p => p.type === filterType)
@@ -38,7 +55,7 @@ export default function ParentPointsPage() {
   const categories = [...new Set(activityPoints.map(p => p.category))]
 
   return (
-    <DashboardLayout role="PARENT" userName={parent.name} userAvatar={parent.avatar}>
+    <DashboardLayout role="PARENT" userName={parent?.name || "Parent"} userAvatar={parent?.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-4xl mx-auto space-y-6 px-1">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -60,7 +77,7 @@ export default function ParentPointsPage() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -68,7 +85,7 @@ export default function ParentPointsPage() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild?.id ? childClassName : child.classId}</p>
                 </div>
               </button>
             ))}

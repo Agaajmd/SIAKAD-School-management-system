@@ -1,11 +1,8 @@
-import { mockClasses } from "@/lib/mock-data"
 import EmployeeClassClient from "./client-page"
 
 // Required for static export with dynamic routes
 export function generateStaticParams() {
-  return mockClasses.map((cls) => ({
-    id: cls.id,
-  }))
+  return [{ id: "c1" }, { id: "c2" }, { id: "c3" }]
 }
 
 interface PageProps {

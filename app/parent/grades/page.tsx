@@ -1,16 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents,
-  mockClasses,
-  mockEmployees,
-  getChildrenByParent,
-  type Student,
-} from "@/lib/mock-data"
-import { getStoredGradesByStudent } from "@/lib/academic-storage"
+import type { Employee, Parent, StudentGrade, Student } from "@/lib/data-model"
 import { 
   ArrowLeft,
   BookOpen,
@@ -21,11 +14,37 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function ParentGradesPage() {
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<Parent | null>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [grades, setGrades] = useState<StudentGrade[]>([])
+  const [teachers, setTeachers] = useState<Employee[]>([])
+  const [childClassName, setChildClassName] = useState("")
 
-  const grades = getStoredGradesByStudent(selectedChild.id)
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+        const res = await fetch(`/api/parent/child-overview${query}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        setParent(data.parent || null)
+        setChildren(data.children || [])
+        if (data.selectedChild) setSelectedChild(data.selectedChild)
+        setGrades(data.grades || [])
+        setChildClassName(data.childClass?.name || data.selectedChild?.classId || "-")
+        if (Array.isArray(data.teachers) && data.teachers.length > 0) {
+          setTeachers(data.teachers)
+        }
+      } catch {
+        setParent(null)
+      }
+    }
+
+    fetchOverview()
+  }, [selectedChild?.id])
   
   const averageKnowledge = grades.length > 0 
     ? Math.round(grades.reduce((acc, g) => acc + g.knowledge, 0) / grades.length)
@@ -51,7 +70,7 @@ export default function ParentGradesPage() {
   }
 
   return (
-    <DashboardLayout role="PARENT" userName={parent.name} userAvatar={parent.avatar}>
+    <DashboardLayout role="PARENT" userName={parent?.name || "Parent"} userAvatar={parent?.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-4xl mx-auto space-y-6 px-1">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -73,7 +92,7 @@ export default function ParentGradesPage() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -81,7 +100,7 @@ export default function ParentGradesPage() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild?.id ? childClassName : child.classId}</p>
                 </div>
               </button>
             ))}
@@ -131,7 +150,7 @@ export default function ParentGradesPage() {
                 </thead>
                 <tbody>
                   {grades.map(grade => {
-                    const teacher = mockEmployees.find(e => e.id === grade.teacherId)
+                    const teacher = teachers.find(e => e.id === grade.teacherId)
                     return (
                       <tr key={grade.id} className="border-b border-slate-100 last:border-0">
                         <td className="py-4 px-2">

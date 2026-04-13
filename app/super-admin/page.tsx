@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { FinancialChart } from "@/components/organisms/financial-chart"
 import { EmployeeLeaderboard } from "@/components/organisms/employee-leaderboard"
-import { mockSuperAdmins, mockFinancialData, mockEmployees, mockStudents, mockClasses } from "@/lib/mock-data"
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,41 +25,58 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-// Mock school performance data
-const schoolPerformance = {
-  academicScore: 87.5,
-  attendanceRate: 94.2,
-  teacherPerformance: 91.3,
-  parentSatisfaction: 88.7,
-}
-
-// Mock announcements
-const announcements = [
-  { id: 1, title: "Rapat Koordinasi Semester", date: "2025-01-05", priority: "high" },
-  { id: 2, title: "Penilaian Kinerja Guru Q4", date: "2025-01-10", priority: "medium" },
-  { id: 3, title: "Laporan Keuangan Tahunan", date: "2025-01-15", priority: "high" },
-]
-
-// Mock recent activities
-const recentActivities = [
-  { id: 1, action: "Laporan keuangan bulan Desember disetujui", time: "2 jam lalu", type: "finance" },
-  { id: 2, action: "3 guru baru telah direkrut", time: "1 hari lalu", type: "staff" },
-  { id: 3, action: "Target akademik semester 1 tercapai", time: "2 hari lalu", type: "academic" },
-]
-
 export default function SuperAdminDashboard() {
-  const superAdmin = mockSuperAdmins[0]
+  const [superAdmin, setSuperAdmin] = useState({ name: "Kepala Sekolah", avatar: "/placeholder-user.jpg" })
+  const [financialData, setFinancialData] = useState<Array<{ month: string; income: number; expenses: number }>>([])
+  const [employees, setEmployees] = useState<any[]>([])
+  const [students, setStudents] = useState<any[]>([])
+  const [classes, setClasses] = useState<any[]>([])
+  const [performance, setPerformance] = useState({
+    academicScore: 0,
+    attendanceRate: 0,
+    teacherPerformance: 0,
+    parentSatisfaction: 0,
+  })
+  const [agenda, setAgenda] = useState<Array<{ id: number; title: string; date: string; priority: string }>>([])
+  const [activities, setActivities] = useState<Array<{ id: number; action: string; time: string; type: string }>>([])
   const [selectedPeriod, setSelectedPeriod] = useState("year")
 
-  const totalIncome = mockFinancialData.reduce((acc, d) => acc + d.income, 0)
-  const totalExpenses = mockFinancialData.reduce((acc, d) => acc + d.expenses, 0)
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/super-admin", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.superAdmin) setSuperAdmin(data.superAdmin)
+        if (Array.isArray(data.financialData)) setFinancialData(data.financialData)
+        if (Array.isArray(data.employees)) setEmployees(data.employees)
+        if (Array.isArray(data.students)) setStudents(data.students)
+        if (Array.isArray(data.classes)) setClasses(data.classes)
+        if (data.schoolPerformance) setPerformance(data.schoolPerformance)
+        if (Array.isArray(data.announcements)) setAgenda(data.announcements)
+        if (Array.isArray(data.recentActivities)) setActivities(data.recentActivities)
+      } catch {
+        // Keep current state when API is unavailable.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const totalIncome = financialData.reduce((acc, d) => acc + d.income, 0)
+  const totalExpenses = financialData.reduce((acc, d) => acc + d.expenses, 0)
   const profit = totalIncome - totalExpenses
-  const profitMargin = ((profit / totalIncome) * 100).toFixed(1)
+  const profitMargin = totalIncome > 0 ? ((profit / totalIncome) * 100).toFixed(1) : "0.0"
 
   const quickStats = [
-    { icon: GraduationCap, label: "Total Siswa", value: mockStudents.length, change: "+12", color: "text-blue-600", bgColor: "bg-blue-50" },
-    { icon: Briefcase, label: "Total Guru", value: mockEmployees.length, change: "+3", color: "text-emerald-600", bgColor: "bg-emerald-50" },
-    { icon: School, label: "Total Kelas", value: mockClasses.length, change: "0", color: "text-purple-600", bgColor: "bg-purple-50" },
+    { icon: GraduationCap, label: "Total Siswa", value: students.length, change: "+12", color: "text-blue-600", bgColor: "bg-blue-50" },
+    { icon: Briefcase, label: "Total Guru", value: employees.length, change: "+3", color: "text-emerald-600", bgColor: "bg-emerald-50" },
+    { icon: School, label: "Total Kelas", value: classes.length, change: "0", color: "text-purple-600", bgColor: "bg-purple-50" },
     { icon: Award, label: "Prestasi", value: 24, change: "+5", color: "text-amber-600", bgColor: "bg-amber-50" },
   ]
 
@@ -139,10 +155,10 @@ export default function SuperAdminDashboard() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: "Nilai Akademik", value: schoolPerformance.academicScore, icon: GraduationCap, color: "blue" },
-              { label: "Kehadiran", value: schoolPerformance.attendanceRate, icon: CheckCircle2, color: "green" },
-              { label: "Kinerja Guru", value: schoolPerformance.teacherPerformance, icon: Star, color: "amber" },
-              { label: "Kepuasan Ortu", value: schoolPerformance.parentSatisfaction, icon: Users, color: "purple" },
+              { label: "Nilai Akademik", value: performance.academicScore, icon: GraduationCap, color: "blue" },
+              { label: "Kehadiran", value: performance.attendanceRate, icon: CheckCircle2, color: "green" },
+              { label: "Kinerja Guru", value: performance.teacherPerformance, icon: Star, color: "amber" },
+              { label: "Kepuasan Ortu", value: performance.parentSatisfaction, icon: Users, color: "purple" },
             ].map((metric) => {
               const Icon = metric.icon
               return (
@@ -198,10 +214,10 @@ export default function SuperAdminDashboard() {
         {/* Main Content Grid */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Financial Chart */}
-          <FinancialChart data={mockFinancialData} />
+          <FinancialChart data={financialData} />
 
           {/* Employee Leaderboard */}
-          <EmployeeLeaderboard employees={mockEmployees} />
+          <EmployeeLeaderboard employees={employees} />
         </div>
 
         {/* Quick Access Menu */}
@@ -240,7 +256,7 @@ export default function SuperAdminDashboard() {
               <span className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">Lihat Semua</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {announcements.map((item) => (
+              {agenda.map((item) => (
                 <div key={item.id} className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors">
                   <div className={`w-2 h-2 rounded-full ${item.priority === "high" ? "bg-red-500" : "bg-yellow-500"}`} />
                   <div className="flex-1 min-w-0">
@@ -265,7 +281,7 @@ export default function SuperAdminDashboard() {
               <span className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">Lihat Semua</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {recentActivities.map((activity) => (
+              {activities.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3 p-4 hover:bg-slate-50 transition-colors">
                   <div className={`p-1.5 rounded-lg ${
                     activity.type === "finance" ? "bg-green-100 text-green-600" :

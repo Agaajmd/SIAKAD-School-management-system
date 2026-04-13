@@ -1,14 +1,45 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { AttendanceLeaderboard } from "@/components/organisms/attendance-leaderboard"
-import { mockEmployees, mockSchedule } from "@/lib/mock-data"
 import { Calendar, LayoutGrid, BookOpen, Users, Award } from "lucide-react"
 import Link from "next/link"
+import type { Student } from "@/lib/data-model"
+
+type Employee = { id: string; name: string; subject: string; classesCount: number; rating: number }
+type Schedule = { id: string; day: string }
 
 export default function EmployeeDashboard() {
-  const employee = mockEmployees[0]
-  const todayClasses = mockSchedule.filter((s) => s.day === "Monday" && s.teacherId === employee.id)
+  const [employee, setEmployee] = useState<Employee>({ id: "", name: "Employee", subject: "-", classesCount: 0, rating: 0 })
+  const [todayClasses, setTodayClasses] = useState<Schedule[]>([])
+  const [students, setStudents] = useState<Student[]>([])
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/employee", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.employee) setEmployee(data.employee)
+        if (Array.isArray(data.todayClasses)) setTodayClasses(data.todayClasses)
+
+        const contextRes = await fetch("/api/employee/context", { cache: "no-store" })
+        if (!contextRes.ok || !active) return
+        const context = await contextRes.json()
+        if (Array.isArray(context.students)) setStudents(context.students)
+      } catch {
+        // Keep fallback values.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const quickActions = [
     {
@@ -78,7 +109,7 @@ export default function EmployeeDashboard() {
         </div>
 
         {/* Attendance Leaderboard */}
-        <AttendanceLeaderboard limit={15} />
+        <AttendanceLeaderboard limit={15} students={students} />
       </div>
     </>
   )

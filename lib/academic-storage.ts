@@ -1,39 +1,13 @@
-import type { ActivityPoint, StudentGrade } from "@/lib/mock-data"
-import { mockActivityPoints, mockStudentGrades } from "@/lib/mock-data"
-
-const GRADES_KEY = "aegix_student_grades_v1"
-const ACTIVITY_POINTS_KEY = "aegix_activity_points_v1"
-
-const safeParse = <T,>(value: string | null, fallback: T): T => {
-  if (!value) return fallback
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
-
-const canUseStorage = () => typeof window !== "undefined"
-
-const readStorage = <T,>(key: string, fallback: T): T => {
-  if (!canUseStorage()) return fallback
-  return safeParse<T>(window.localStorage.getItem(key), fallback)
-}
-
-const writeStorage = <T,>(key: string, value: T) => {
-  if (!canUseStorage()) return
-  window.localStorage.setItem(key, JSON.stringify(value))
-}
+import type { ActivityPoint, StudentGrade } from "@/lib/data-model"
+const runtimeGrades: StudentGrade[] = []
+const runtimeActivityPoints: ActivityPoint[] = []
 
 export const getStoredStudentGrades = (): StudentGrade[] => {
-  const grades = readStorage<StudentGrade[]>(GRADES_KEY, [])
-  if (grades.length > 0) return grades
-  writeStorage(GRADES_KEY, mockStudentGrades)
-  return [...mockStudentGrades]
+  return [...runtimeGrades]
 }
 
 export const setStoredStudentGrades = (grades: StudentGrade[]) => {
-  writeStorage(GRADES_KEY, grades)
+  runtimeGrades.splice(0, runtimeGrades.length, ...grades)
 }
 
 export const getStoredGradesByStudent = (studentId: string): StudentGrade[] => {
@@ -45,14 +19,11 @@ export const getStoredGradesByTeacher = (teacherId: string): StudentGrade[] => {
 }
 
 export const getStoredActivityPoints = (): ActivityPoint[] => {
-  const points = readStorage<ActivityPoint[]>(ACTIVITY_POINTS_KEY, [])
-  if (points.length > 0) return points
-  writeStorage(ACTIVITY_POINTS_KEY, mockActivityPoints)
-  return [...mockActivityPoints]
+  return [...runtimeActivityPoints]
 }
 
 export const setStoredActivityPoints = (points: ActivityPoint[]) => {
-  writeStorage(ACTIVITY_POINTS_KEY, points)
+  runtimeActivityPoints.splice(0, runtimeActivityPoints.length, ...points)
 }
 
 export const addStoredActivityPoint = (point: ActivityPoint) => {

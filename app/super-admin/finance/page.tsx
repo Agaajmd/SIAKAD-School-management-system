@@ -1,9 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { mockSuperAdmins, mockFinancialData, mockStudents } from "@/lib/mock-data"
 import {
   TrendingUp,
   TrendingDown,
@@ -33,28 +32,46 @@ import {
 } from "recharts"
 
 export default function SuperAdminFinance() {
-  const superAdmin = mockSuperAdmins[0]
+  const [superAdmin, setSuperAdmin] = useState({ name: "Kepala Sekolah", avatar: "/placeholder-user.jpg" })
+  const [financialData, setFinancialData] = useState<Array<{ month: string; income: number; expenses: number }>>([])
+  const [students, setStudents] = useState<Array<{ paymentStatus?: string }>>([])
+  const [expenseBreakdown, setExpenseBreakdown] = useState<Array<{ category: string; amount: number; percentage: number }>>([])
   const [selectedPeriod, setSelectedPeriod] = useState<"month" | "quarter" | "year">("month")
 
-  const totalIncome = mockFinancialData.reduce((acc, d) => acc + d.income, 0)
-  const totalExpenses = mockFinancialData.reduce((acc, d) => acc + d.expenses, 0)
-  const profit = totalIncome - totalExpenses
-  const profitMargin = ((profit / totalIncome) * 100).toFixed(1)
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/super-admin", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.superAdmin) setSuperAdmin(data.superAdmin)
+        if (Array.isArray(data.financialData)) setFinancialData(data.financialData)
+        if (Array.isArray(data.students)) setStudents(data.students)
+        if (Array.isArray(data.expenseBreakdown)) setExpenseBreakdown(data.expenseBreakdown)
+      } catch {
+        // Keep fallback values.
+      }
+    }
 
-  const paidStudents = mockStudents.filter((s) => s.paymentStatus === "PAID").length
-  const unpaidStudents = mockStudents.filter((s) => s.paymentStatus === "UNPAID").length
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const totalIncome = financialData.reduce((acc, d) => acc + d.income, 0)
+  const totalExpenses = financialData.reduce((acc, d) => acc + d.expenses, 0)
+  const profit = totalIncome - totalExpenses
+  const profitMargin = totalIncome > 0 ? ((profit / totalIncome) * 100).toFixed(1) : "0.0"
+
+  const paidStudents = students.filter((s) => s.paymentStatus === "PAID").length
+  const unpaidStudents = students.filter((s) => s.paymentStatus === "UNPAID").length
 
   const paymentData = [
     { name: "Paid", value: paidStudents, color: "#22c55e" },
     { name: "Unpaid", value: unpaidStudents, color: "#ef4444" },
-  ]
-
-  const expenseBreakdown = [
-    { category: "Salaries", amount: 65000000, percentage: 55 },
-    { category: "Utilities", amount: 15000000, percentage: 13 },
-    { category: "Supplies", amount: 12000000, percentage: 10 },
-    { category: "Maintenance", amount: 18000000, percentage: 15 },
-    { category: "Other", amount: 8000000, percentage: 7 },
   ]
 
   const formatCurrency = (value: number) => `Rp ${(value / 1000000).toFixed(0)}M`
@@ -166,7 +183,7 @@ export default function SuperAdminFinance() {
             </div>
             <div className="h-48 sm:h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockFinancialData}>
+                <BarChart data={financialData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis dataKey="month" stroke="rgba(255,255,255,0.5)" tick={{ fontSize: 10 }} />
                   <YAxis
@@ -270,7 +287,7 @@ export default function SuperAdminFinance() {
           </div>
           <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mockFinancialData}>
+              <LineChart data={financialData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="month" stroke="rgba(255,255,255,0.5)" tick={{ fontSize: 10 }} />
                 <YAxis

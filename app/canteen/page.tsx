@@ -1,14 +1,7 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import { 
-  mockCanteens,
-  mockProducts,
-  type Product,
-  type Canteen,
-  type OrderItem,
-} from "@/lib/mock-data"
 import { 
   Search,
   Store,
@@ -26,6 +19,34 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+type Product = {
+  id: string
+  canteenId: string
+  name: string
+  description?: string
+  price: number
+  category: "MAKANAN" | "MINUMAN" | "SNACK"
+  image: string
+  isAvailable: boolean
+}
+
+type Canteen = {
+  id: string
+  name: string
+  isOpen: boolean
+  image?: string
+  description?: string
+  rating?: number
+  totalOrders?: number
+}
+
+type OrderItem = {
+  productId: string
+  productName: string
+  quantity: number
+  price: number
+}
+
 interface CartItem extends OrderItem {
   canteenId: string
   canteenName: string
@@ -37,17 +58,42 @@ export default function CanteenPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [selectedCanteen, setSelectedCanteen] = useState<Canteen | null>(null)
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250)
 
-  const activeCanteens = useMemo(() => mockCanteens.filter((canteen) => canteen.isOpen), [])
+  const [canteens, setCanteens] = useState<Canteen[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/canteen/overview", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (Array.isArray(data.canteens)) setCanteens(data.canteens)
+        if (Array.isArray(data.products)) setProducts(data.products)
+      } catch {
+        // Keep fallback empty data.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const activeCanteens = useMemo(() => canteens.filter((canteen) => canteen.isOpen), [canteens])
   
   const allProducts = useMemo(
     () =>
-      mockProducts.filter((product) => {
-        const canteen = mockCanteens.find((item) => item.id === product.canteenId)
+      products.filter((product) => {
+        const canteen = canteens.find((item) => item.id === product.canteenId)
         return canteen?.isOpen && product.isAvailable
       }),
-    [],
+    [canteens, products],
   )
 
   const filteredProducts = useMemo(() => {
@@ -71,7 +117,7 @@ export default function CanteenPage() {
   const cartItemCount = useMemo(() => cart.reduce((acc, item) => acc + item.quantity, 0), [cart])
 
   const addToCart = useCallback((product: Product) => {
-    const canteen = mockCanteens.find(c => c.id === product.canteenId)
+    const canteen = canteens.find(c => c.id === product.canteenId)
     if (!canteen) return
 
     // Check if cart has items from different canteen
@@ -110,7 +156,7 @@ export default function CanteenPage() {
   const removeFromCart = useCallback((productId: string) => {
     const existingItem = cart.find(item => item.productId === productId)
     if (existingItem && existingItem.quantity > 1) {
-      const product = mockProducts.find(p => p.id === productId)
+      const product = products.find(p => p.id === productId)
       if (product) {
         setCart((prev) =>
           prev.map((item) =>
@@ -130,13 +176,46 @@ export default function CanteenPage() {
     setShowCart(false)
   }, [])
 
-  const handleCheckout = useCallback(() => {
+  const handleCheckout = useCallback(async () => {
     if (cart.length === 0) return
-    toast.success("Pesanan berhasil dibuat!", {
-      description: "Pesanan Anda sedang diproses oleh kantin",
-    })
-    clearCart()
-  }, [cart.length, clearCart])
+    setIsCheckingOut(true)
+    try {
+      const canteenId = cart[0]?.canteenId
+      if (!canteenId) {
+        toast.error("Kantin tidak valid")
+        return
+      }
+
+      const res = await fetch("/api/canteen/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          canteenId,
+          items: cart.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal membuat pesanan")
+      }
+
+      toast.success("Pesanan berhasil dibuat!", {
+        description: "Pesanan Anda sedang diproses oleh kantin",
+      })
+      clearCart()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal membuat pesanan"
+      toast.error(message)
+    } finally {
+      setIsCheckingOut(false)
+    }
+  }, [cart, clearCart])
 
   const quantityByProduct = useMemo(() => {
     return cart.reduce<Record<string, number>>((acc, item) => {
@@ -268,7 +347,7 @@ export default function CanteenPage() {
           </h2>
           <div className="grid grid-cols-2 gap-4">
             {filteredProducts.map(product => {
-              const canteen = mockCanteens.find(c => c.id === product.canteenId)
+              const canteen = canteens.find(c => c.id === product.canteenId)
               const quantity = getItemQuantity(product.id)
               
               return (
@@ -385,7 +464,7 @@ export default function CanteenPage() {
               {cart.length > 0 ? (
                 <div className="space-y-4">
                   {cart.map(item => {
-                    const product = mockProducts.find(p => p.id === item.productId)
+                    const product = products.find(p => p.id === item.productId)
                     return (
                       <div key={item.productId} className="flex items-center gap-3">
                         <img 
@@ -439,9 +518,10 @@ export default function CanteenPage() {
                   </button>
                   <button
                     onClick={handleCheckout}
-                    className="flex-1 py-3 px-4 bg-orange-500 text-white rounded-2xl font-medium hover:bg-orange-600 transition-colors"
+                    disabled={isCheckingOut}
+                    className="flex-1 py-3 px-4 bg-orange-500 text-white rounded-2xl font-medium hover:bg-orange-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Pesan Sekarang
+                    {isCheckingOut ? "Memproses..." : "Pesan Sekarang"}
                   </button>
                 </div>
               </div>

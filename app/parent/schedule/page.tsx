@@ -1,16 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents, 
-  mockSchedule, 
-  mockClasses,
-  getEmployeeById, 
-  getChildrenByParent,
-  type Student 
-} from "@/lib/mock-data"
+import type { Student } from "@/lib/data-model"
 import { Clock, MapPin, User, Calendar as CalendarIcon, ChevronRight, GraduationCap } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,17 +16,45 @@ const dayMap = [
 ]
 
 export default function ParentSchedule() {
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<any>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [childClass, setChildClass] = useState<any>(null)
+  const [schedules, setSchedules] = useState<any[]>([])
+  const [teachers, setTeachers] = useState<any[]>([])
   const [selectedDay, setSelectedDay] = useState("Monday")
 
-  const childClass = mockClasses.find(c => c.id === selectedChild.classId)
+  useEffect(() => {
+    const load = async () => {
+      const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+      const res = await fetch(`/api/parent/child-overview${query}`, { cache: "no-store" })
+      if (!res.ok) return
+      const data = await res.json()
+      setParent(data.parent || null)
+      setChildren(Array.isArray(data.children) ? data.children : [])
+      if (data.selectedChild) {
+        setSelectedChild(data.selectedChild)
+      }
+      setChildClass(data.childClass || null)
+      setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
+      setTeachers(Array.isArray(data.teachers) ? data.teachers : [])
+    }
 
-  // Filter schedule by selected day for child's class
-  const daySchedule = mockSchedule
-    .filter((s) => s.day === selectedDay && s.classId === selectedChild.classId)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+    load()
+  }, [selectedChild?.id])
+
+  const daySchedule = useMemo(
+    () => schedules.filter((s) => s.day === selectedDay).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    [schedules, selectedDay],
+  )
+
+  if (!parent || !selectedChild) {
+    return (
+      <DashboardLayout role="PARENT" userName="Parent" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto py-8 text-slate-500">Data jadwal belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout role="PARENT" userName={parent.name} userAvatar={parent.avatar}>
@@ -53,7 +74,7 @@ export default function ParentSchedule() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-pink-500 bg-pink-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -61,7 +82,7 @@ export default function ParentSchedule() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild.id ? childClass?.name || child.classId : child.classId}</p>
                 </div>
               </button>
             ))}
@@ -112,7 +133,7 @@ export default function ParentSchedule() {
             </GlassCard>
           ) : (
             daySchedule.map((schedule, index) => {
-              const teacher = getEmployeeById(schedule.teacherId)
+              const teacher = teachers.find((item) => item.id === schedule.teacherId)
               return (
                 <GlassCard
                   key={schedule.id}

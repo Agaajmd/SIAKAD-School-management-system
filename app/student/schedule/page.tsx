@@ -2,9 +2,8 @@
 
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { mockStudents, mockSchedule, getEmployeeById } from "@/lib/mock-data"
 import { Clock, MapPin, User, Calendar as CalendarIcon, ChevronRight } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 const dayMap = [
   { id: "Monday", label: "Senin" },
@@ -15,13 +14,47 @@ const dayMap = [
 ]
 
 export default function StudentSchedule() {
-  const student = mockStudents[0]
+  const [student, setStudent] = useState<any>(null)
+  const [schedules, setSchedules] = useState<any[]>([])
+  const [teachers, setTeachers] = useState<Record<string, string>>({})
   const [selectedDay, setSelectedDay] = useState("Monday")
 
-  // Filter schedule by selected day for student's class
-  const daySchedule = mockSchedule
-    .filter((s) => s.day === selectedDay && s.classId === student.classId)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/student/overview", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        setStudent(data.student || null)
+        setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
+        const nextTeachers: Record<string, string> = {}
+        if (data.teacher?.id) {
+          nextTeachers[data.teacher.id] = data.teacher.name
+        }
+        setTeachers(nextTeachers)
+      } catch {
+        setStudent(null)
+      }
+    }
+
+    load()
+  }, [])
+
+  const daySchedule = useMemo(
+    () =>
+      schedules
+        .filter((s) => s.day === selectedDay)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    [schedules, selectedDay],
+  )
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="Student" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto py-8 text-slate-500">Data jadwal belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
@@ -58,7 +91,7 @@ export default function StudentSchedule() {
             </GlassCard>
           ) : (
             daySchedule.map((schedule, index) => {
-              const teacher = getEmployeeById(schedule.teacherId)
+              const teacherName = teachers[schedule.teacherId] || "TBA"
               return (
                 <GlassCard
                   key={schedule.id}
@@ -84,7 +117,7 @@ export default function StudentSchedule() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm text-slate-500">
                           <User className="w-3.5 h-3.5" />
-                          <span>{teacher?.name || "TBA"}</span>
+                          <span>{teacherName}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-slate-500">
                           <MapPin className="w-3.5 h-3.5" />

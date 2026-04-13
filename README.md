@@ -75,21 +75,27 @@ cd aegix-sle
 # 2. Install dependencies
 npm install
 
-# 3. Run development server
+# 3. Setup environment
+cp .env.example .env.local
+# lalu isi GOOGLE_SHEETS_ID dan GOOGLE_SERVICE_ACCOUNT_JSON
+
+# 4. Run development server
 npm run dev
 
-# 4. Buka browser
+# 5. Buka browser
 open http://localhost:3000
 ```
+
+### Environment Variables
+
+- `GOOGLE_SHEETS_ID`: ID spreadsheet Google Sheets.
+- `GOOGLE_SERVICE_ACCOUNT_JSON`: service account JSON dalam format string satu baris (private key tetap pakai `\\n`).
 
 ### Build untuk Production
 
 ```bash
-# Build static export
+# Build production
 npm run build
-
-# Output folder: /out
-# Siap deploy ke hosting statis (Vercel, Netlify, dll)
 ```
 
 ---
@@ -167,7 +173,7 @@ aegix-sle/
 │
 ├── lib/
 │   ├── auth.tsx                # Auth context, login/logout, guards
-│   ├── mock-data.ts            # Mock database (users, products, etc)
+│   ├── data-model.ts           # Shared types and seed data
 │   └── utils.ts                # Utility functions (cn, etc)
 │
 ├── hooks/

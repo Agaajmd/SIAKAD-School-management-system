@@ -2,8 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import type { UserRole } from "./mock-data"
-import { getAllAuthUsers } from "./auth-user-storage"
+import type { UserRole } from "./data-model"
 
 // Auth user type combining all user types
 export interface AuthUser {
@@ -12,7 +11,6 @@ export interface AuthUser {
   email: string
   avatar: string
   role: UserRole
-  password?: string
 }
 
 interface AuthContextType {
@@ -20,6 +18,7 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  register: (payload: { name: string; email: string; password: string; role: UserRole }) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   getRedirectPath: (role: UserRole) => string
 }
@@ -35,21 +34,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check for existing session on mount
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       try {
-        const storedUser = localStorage.getItem("auth_user")
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser)
-          setUser(parsedUser)
+        const res = await fetch("/api/auth/session", { cache: "no-store" })
+        if (!res.ok) {
+          setUser(null)
+          return
         }
-      } catch (error) {
-        console.error("Failed to parse auth user:", error)
-        localStorage.removeItem("auth_user")
+        const data = await res.json()
+        setUser(data.user || null)
+      } catch {
+        setUser(null)
       } finally {
         setIsLoading(false)
       }
     }
-    checkAuth()
+    checkAuth().catch(() => {
+      setUser(null)
+      setIsLoading(false)
+    })
   }, [])
 
   const getRedirectPath = useCallback((role: UserRole): string => {
@@ -79,9 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isPublicPath = publicPaths.includes(pathname)
 
     if (!user && !isPublicPath) {
-      if (lastRedirectRef.current !== "/") {
-        lastRedirectRef.current = "/"
-        router.replace("/")
+      if (lastRedirectRef.current !== "/login") {
+        lastRedirectRef.current = "/login"
+        router.replace("/login")
       }
     } else if (user && isPublicPath) {
       const targetPath = getRedirectPath(user.role)
@@ -95,29 +98,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, isLoading, pathname, router, getRedirectPath])
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Keep a short delay for UX feedback without adding noticeable lag.
-    await new Promise(resolve => setTimeout(resolve, 200))
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
 
-    const foundUser = getAllAuthUsers().find(
-      u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    )
+      const data = await res.json()
+      if (!res.ok || !data?.user) {
+        return { success: false, error: data?.error || "Email atau password salah" }
+      }
 
-    if (!foundUser) {
-      return { success: false, error: "Email atau password salah" }
+      setUser(data.user)
+      return { success: true }
+    } catch {
+      return { success: false, error: "Gagal terhubung ke server" }
     }
-
-    // Remove password before storing
-    const { password: _, ...userWithoutPassword } = foundUser
-    setUser(userWithoutPassword)
-    localStorage.setItem("auth_user", JSON.stringify(userWithoutPassword))
-
-    return { success: true }
   }, [])
 
-  const logout = useCallback(() => {
+  const register = useCallback(async (payload: { name: string; email: string; password: string; role: UserRole }) => {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        return { success: false, error: data?.error || "Gagal melakukan registrasi" }
+      }
+
+      return { success: true }
+    } catch {
+      return { success: false, error: "Gagal terhubung ke server" }
+    }
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch {
+      // Ignore network errors on logout.
+    }
     setUser(null)
-    localStorage.removeItem("auth_user")
-    router.replace("/")
+    router.replace("/login")
   }, [router])
 
   const value = useMemo(
@@ -126,10 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: !!user,
       login,
+      register,
       logout,
       getRedirectPath,
     }),
-    [user, isLoading, login, logout, getRedirectPath],
+    [user, isLoading, login, register, logout, getRedirectPath],
   )
 
   return (

@@ -1,20 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import {
-  mockAdmins,
-  mockStudents,
-  mockEmployees,
-  mockSuperAdmins,
-  type User,
-  type Student,
-  type Employee,
-} from "@/lib/mock-data"
+import type { User, Student, Employee } from "@/lib/data-model"
 import {
   Search,
   Filter,
@@ -29,16 +21,38 @@ import {
 type UserType = "all" | "students" | "employees" | "admins"
 
 export default function AdminUsersPage() {
-  const admin = mockAdmins[0]
+  const [admin, setAdmin] = useState<any>(null)
+  const [allUsers, setAllUsers] = useState<(User | Student | Employee)[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedFilter, setSelectedFilter] = useState<UserType>("all")
   const [selectedUser, setSelectedUser] = useState<User | Student | Employee | null>(null)
   const [showUserModal, setShowUserModal] = useState(false)
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250)
 
+  useEffect(() => {
+    const load = async () => {
+      const [adminRes, usersRes] = await Promise.all([
+        fetch("/api/dashboard/admin", { cache: "no-store" }),
+        fetch("/api/admin/users", { cache: "no-store" }),
+      ])
+
+      if (adminRes.ok) {
+        const data = await adminRes.json()
+        setAdmin(data.admin || null)
+      }
+
+      if (usersRes.ok) {
+        const data = await usersRes.json()
+        setAllUsers(Array.isArray(data.users) ? data.users : [])
+      }
+    }
+
+    load()
+  }, [])
+
   const totalUsersCount = useMemo(
-    () => mockStudents.length + mockEmployees.length + mockAdmins.length + mockSuperAdmins.length,
-    [],
+    () => allUsers.length,
+    [allUsers],
   )
 
   const filters: { id: UserType; label: string; icon: typeof GraduationCap; count: number }[] = useMemo(
@@ -49,11 +63,26 @@ export default function AdminUsersPage() {
         icon: Filter,
         count: totalUsersCount,
       },
-      { id: "students", label: "Students", icon: GraduationCap, count: mockStudents.length },
-      { id: "employees", label: "Teachers", icon: Briefcase, count: mockEmployees.length },
-      { id: "admins", label: "Staff", icon: Shield, count: mockAdmins.length + mockSuperAdmins.length },
+      {
+        id: "students",
+        label: "Students",
+        icon: GraduationCap,
+        count: allUsers.filter((u) => u.role === "STUDENT").length,
+      },
+      {
+        id: "employees",
+        label: "Teachers",
+        icon: Briefcase,
+        count: allUsers.filter((u) => u.role === "EMPLOYEE").length,
+      },
+      {
+        id: "admins",
+        label: "Staff",
+        icon: Shield,
+        count: allUsers.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN").length,
+      },
     ],
-    [totalUsersCount],
+    [allUsers, totalUsersCount],
   )
 
   const users = useMemo(() => {
@@ -61,16 +90,16 @@ export default function AdminUsersPage() {
 
     switch (selectedFilter) {
       case "students":
-        users = mockStudents
+        users = allUsers.filter((u) => u.role === "STUDENT")
         break
       case "employees":
-        users = mockEmployees
+        users = allUsers.filter((u) => u.role === "EMPLOYEE")
         break
       case "admins":
-        users = [...mockAdmins, ...mockSuperAdmins]
+        users = allUsers.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN")
         break
       default:
-        users = [...mockStudents, ...mockEmployees, ...mockAdmins, ...mockSuperAdmins]
+        users = allUsers
     }
 
     if (debouncedSearchQuery) {
@@ -81,7 +110,7 @@ export default function AdminUsersPage() {
     }
 
     return users
-  }, [selectedFilter, debouncedSearchQuery])
+  }, [selectedFilter, debouncedSearchQuery, allUsers])
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -114,7 +143,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
+    <DashboardLayout role="ADMIN" userName={admin?.name || "Admin"} userAvatar={admin?.avatar || "/placeholder-user.jpg"}>
       <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>

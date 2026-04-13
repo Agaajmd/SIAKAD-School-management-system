@@ -1,447 +1,209 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Loader2, Plus, Search, Store, Trash2, UserCog, UtensilsCrossed } from "lucide-react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
+import { GlassInput } from "@/components/atoms/glass-input"
+import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { 
-  mockAdmins,
-  mockCanteenOwners,
-  mockCanteens,
-  type CanteenOwner,
-  type Canteen,
-} from "@/lib/mock-data"
-import { 
-  ArrowLeft,
-  Search,
-  Plus,
-  Edit2,
-  Trash2,
-  Store,
-  Star,
-  ShoppingBag,
-  Phone,
-  Mail,
-  ToggleLeft,
-  ToggleRight,
-} from "lucide-react"
-import Link from "next/link"
-import { cn } from "@/lib/utils"
-import { toast } from "sonner"
-import { getAllAuthUsers, removeAuthUserCredential, upsertAuthUserCredential } from "@/lib/auth-user-storage"
+
+type Owner = {
+  id: string
+  name: string
+  email: string
+  canteenName: string
+  canteenId?: string
+}
+
+type OwnerForm = {
+  name: string
+  email: string
+  password: string
+  canteenName: string
+}
+
+const EMPTY_FORM: OwnerForm = {
+  name: "",
+  email: "",
+  password: "",
+  canteenName: "",
+}
 
 export default function AdminCanteenPage() {
-  const admin = mockAdmins[0]
-  const [canteenOwners, setCanteenOwners] = useState<CanteenOwner[]>(mockCanteenOwners)
-  const [canteens, setCanteens] = useState<Canteen[]>(mockCanteens)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [showModal, setShowModal] = useState(false)
-  const [editingOwner, setEditingOwner] = useState<CanteenOwner | null>(null)
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    phone: "",
-    canteenName: "",
-    canteenDescription: "",
-    isActive: true,
-  })
+  const [admin, setAdmin] = useState<any>(null)
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [query, setQuery] = useState("")
+  const [showFormModal, setShowFormModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [editingOwner, setEditingOwner] = useState<Owner | null>(null)
+  const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null)
+  const [form, setForm] = useState<OwnerForm>(EMPTY_FORM)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const filteredOwners = canteenOwners.filter(o => 
-    o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.canteenName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const load = async () => {
+    const res = await fetch("/api/admin/canteen-owners", { cache: "no-store" })
+    if (!res.ok) throw new Error("Gagal memuat data kantin")
+    const data = await res.json()
+    setAdmin(data.admin || null)
+    setOwners(Array.isArray(data.owners) ? data.owners : [])
+  }
 
-  const handleOpenModal = (owner?: CanteenOwner) => {
-    if (owner) {
-      const canteen = canteens.find(c => c.id === owner.canteenId)
-      setEditingOwner(owner)
-      setFormData({
-        name: owner.name,
-        email: owner.email,
-        password: "",
-        phone: owner.phone,
-        canteenName: owner.canteenName,
-        canteenDescription: canteen?.description || "",
-        isActive: owner.isActive,
-      })
-    } else {
+  useEffect(() => {
+    load().catch(() => toast.error("Gagal memuat data"))
+  }, [])
+
+  const filteredOwners = useMemo(() => {
+    const q = query.toLowerCase()
+    return owners.filter(
+      (owner) =>
+        owner.name.toLowerCase().includes(q) ||
+        owner.email.toLowerCase().includes(q) ||
+        owner.canteenName.toLowerCase().includes(q),
+    )
+  }, [owners, query])
+
+  const openCreate = () => {
+    setEditingOwner(null)
+    setForm(EMPTY_FORM)
+    setShowFormModal(true)
+  }
+
+  const openEdit = (owner: Owner) => {
+    setEditingOwner(owner)
+    setForm({
+      name: owner.name,
+      email: owner.email,
+      password: "",
+      canteenName: owner.canteenName,
+    })
+    setShowFormModal(true)
+  }
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.email || !form.canteenName || (!editingOwner && !form.password)) {
+      toast.error("Nama, email, nama kantin, dan password wajib diisi")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      if (editingOwner) {
+        const res = await fetch(`/api/admin/canteen-owners/${editingOwner.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            email: form.email,
+            password: form.password || undefined,
+            canteenName: form.canteenName,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || "Gagal update pemilik kantin")
+        setOwners((prev) => prev.map((owner) => (owner.id === editingOwner.id ? data.owner : owner)))
+        toast.success("Pemilik kantin berhasil diperbarui")
+      } else {
+        const res = await fetch("/api/admin/canteen-owners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || "Gagal membuat pemilik kantin")
+        setOwners((prev) => [...prev, data.owner])
+        toast.success("Pemilik kantin berhasil dibuat")
+      }
+      setShowFormModal(false)
       setEditingOwner(null)
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
-        phone: "",
-        canteenName: "",
-        canteenDescription: "",
-        isActive: true,
-      })
-    }
-    setShowModal(true)
-  }
-
-  const handleSubmit = () => {
-    if (!formData.name || !formData.email || !formData.canteenName) {
-      toast.error("Mohon lengkapi semua field yang diperlukan")
-      return
-    }
-
-    if (!editingOwner && formData.password.length < 6) {
-      toast.error("Password pemilik kantin minimal 6 karakter")
-      return
-    }
-
-    if (editingOwner && formData.password && formData.password.length < 6) {
-      toast.error("Password pemilik kantin minimal 6 karakter")
-      return
-    }
-
-    if (editingOwner) {
-      const existingCredential = getAllAuthUsers().find((user) => user.id === editingOwner.id)
-      const password = formData.password || existingCredential?.password || "canteen123"
-
-      setCanteenOwners(canteenOwners.map(o => o.id === editingOwner.id ? {
-        ...o,
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        canteenName: formData.canteenName,
-        isActive: formData.isActive,
-      } : o))
-      setCanteens(canteens.map(c => c.ownerId === editingOwner.id ? {
-        ...c,
-        name: formData.canteenName,
-        description: formData.canteenDescription,
-      } : c))
-      upsertAuthUserCredential({
-        id: editingOwner.id,
-        name: formData.name,
-        email: formData.email,
-        avatar: editingOwner.avatar,
-        role: "CANTEEN_OWNER",
-        password,
-      })
-      toast.success("Data pemilik kantin berhasil diperbarui")
-    } else {
-      const newOwnerId = `co${Date.now()}`
-      const newCanteenId = `can${Date.now()}`
-      
-      const newOwner: CanteenOwner = {
-        id: newOwnerId,
-        name: formData.name,
-        email: formData.email,
-        avatar: "/placeholder.svg?height=100&width=100",
-        role: "CANTEEN_OWNER",
-        canteenId: newCanteenId,
-        canteenName: formData.canteenName,
-        phone: formData.phone,
-        isActive: formData.isActive,
-      }
-
-      const newCanteen: Canteen = {
-        id: newCanteenId,
-        name: formData.canteenName,
-        ownerId: newOwnerId,
-        description: formData.canteenDescription,
-        image: "/placeholder.svg?height=200&width=300&query=food+stall",
-        rating: 0,
-        totalOrders: 0,
-        isOpen: formData.isActive,
-      }
-
-      setCanteenOwners([...canteenOwners, newOwner])
-      setCanteens([...canteens, newCanteen])
-      upsertAuthUserCredential({
-        id: newOwner.id,
-        name: newOwner.name,
-        email: newOwner.email,
-        avatar: newOwner.avatar,
-        role: "CANTEEN_OWNER",
-        password: formData.password,
-      })
-      toast.success("Pemilik kantin baru berhasil ditambahkan")
-    }
-    setShowModal(false)
-  }
-
-  const handleDelete = (ownerId: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus pemilik kantin ini?")) {
-      const owner = canteenOwners.find(o => o.id === ownerId)
-      if (owner) {
-        setCanteenOwners(canteenOwners.filter(o => o.id !== ownerId))
-        setCanteens(canteens.filter(c => c.id !== owner.canteenId))
-        removeAuthUserCredential(owner.id)
-        toast.success("Pemilik kantin berhasil dihapus")
-      }
+      setForm(EMPTY_FORM)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menyimpan data")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleToggleActive = (ownerId: string) => {
-    setCanteenOwners(canteenOwners.map(o => o.id === ownerId ? { ...o, isActive: !o.isActive } : o))
-    const owner = canteenOwners.find(o => o.id === ownerId)
-    if (owner) {
-      setCanteens(canteens.map(c => c.ownerId === ownerId ? { ...c, isOpen: !owner.isActive } : c))
+  const handleDelete = async () => {
+    if (!selectedOwner) return
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(`/api/admin/canteen-owners/${selectedOwner.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || "Gagal menghapus pemilik kantin")
+      setOwners((prev) => prev.filter((owner) => owner.id !== selectedOwner.id))
+      setShowDeleteModal(false)
+      setSelectedOwner(null)
+      toast.success("Pemilik kantin berhasil dihapus")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menghapus data")
+    } finally {
+      setIsSubmitting(false)
     }
-    toast.success("Status pemilik kantin diperbarui")
   }
 
   return (
-    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
-      <div className="max-w-4xl mx-auto space-y-6 px-1">
-        {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link href="/admin" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
-              <ArrowLeft className="w-5 h-5 text-slate-600" />
-            </Link>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-slate-800">Manajemen Kantin</h1>
-              <p className="text-slate-600 text-sm break-words">{canteenOwners.length} pemilik kantin terdaftar</p>
-            </div>
+    <DashboardLayout role="ADMIN" userName={admin?.name || "Admin"} userAvatar={admin?.avatar || "/placeholder-user.jpg"}>
+      <div className="max-w-5xl mx-auto space-y-6 px-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Manajemen Kantin</h1>
+            <p className="text-slate-500">Kelola akun pemilik kantin dan nama unit kantin</p>
           </div>
-          <button
-            onClick={() => handleOpenModal()}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Tambah
-          </button>
+          <GlassButton onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Tambah Pemilik Kantin
+          </GlassButton>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari pemilik kantin..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <GlassCard className="p-4 text-center"><UserCog className="w-6 h-6 mx-auto mb-2 text-blue-600" /><p className="text-2xl font-bold text-slate-800">{owners.length}</p><p className="text-xs text-slate-500">Total Pemilik</p></GlassCard>
+          <GlassCard className="p-4 text-center"><Store className="w-6 h-6 mx-auto mb-2 text-emerald-600" /><p className="text-2xl font-bold text-slate-800">{owners.length}</p><p className="text-xs text-slate-500">Total Kantin</p></GlassCard>
+          <GlassCard className="p-4 text-center"><UtensilsCrossed className="w-6 h-6 mx-auto mb-2 text-amber-600" /><p className="text-2xl font-bold text-slate-800">Aktif</p><p className="text-xs text-slate-500">Status Unit</p></GlassCard>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          <GlassCard className="p-4 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-slate-800">{canteenOwners.length}</p>
-            <p className="text-xs sm:text-sm text-slate-600">Total Kantin</p>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-green-700">{canteenOwners.filter(o => o.isActive).length}</p>
-            <p className="text-xs sm:text-sm text-slate-600">Aktif</p>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-red-700">{canteenOwners.filter(o => !o.isActive).length}</p>
-            <p className="text-xs sm:text-sm text-slate-600">Tidak Aktif</p>
-          </GlassCard>
-        </div>
+        <GlassCard className="p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <GlassInput placeholder="Cari pemilik, email, atau nama kantin..." className="pl-10" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+        </GlassCard>
 
-        {/* Canteen Owners List */}
-        <div className="space-y-3">
-          {filteredOwners.map(owner => {
-            const canteen = canteens.find(c => c.id === owner.canteenId)
-            return (
-              <GlassCard key={owner.id} className={cn("p-4", !owner.isActive && "opacity-75")}>
-                <div className="flex items-start gap-3 sm:gap-4">
-                  <img 
-                    src={owner.avatar} 
-                    alt={owner.name}
-                    className="w-16 h-16 rounded-xl object-cover bg-slate-100"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-slate-800 break-words">{owner.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Store className="w-4 h-4 text-slate-500 shrink-0" />
-                          <span className="text-sm text-slate-700 break-words">{owner.canteenName}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          onClick={() => handleOpenModal(owner)}
-                          className="p-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                          aria-label={`Edit ${owner.name}`}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(owner.id)}
-                          className="p-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
-                          aria-label={`Hapus ${owner.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-sm text-slate-600">
-                      <span className="flex items-center gap-1 min-w-0">
-                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                        {owner.email}
-                      </span>
-                      <span className="flex items-center gap-1 min-w-0 break-words">
-                        <Phone className="w-3.5 h-3.5 shrink-0" />
-                        {owner.phone}
-                      </span>
-                    </div>
-
-                    {canteen && (
-                      <div className="flex items-center gap-4 mt-2 text-sm">
-                        <span className="flex items-center gap-1 text-amber-600">
-                          <Star className="w-3.5 h-3.5 fill-current" />
-                          {canteen.rating}
-                        </span>
-                        <span className="flex items-center gap-1 text-slate-500">
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          {canteen.totalOrders} order
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm text-slate-700">Status Kantin:</span>
-                  <button
-                    onClick={() => handleToggleActive(owner.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
-                      owner.isActive 
-                        ? "bg-green-100 text-green-700" 
-                        : "bg-red-100 text-red-700"
-                    )}
-                  >
-                    {owner.isActive ? (
-                      <>
-                        <ToggleRight className="w-4 h-4" />
-                        Aktif
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft className="w-4 h-4" />
-                        Tidak Aktif
-                      </>
-                    )}
-                  </button>
-                </div>
-              </GlassCard>
-            )
-          })}
-        </div>
-
-        {filteredOwners.length === 0 && (
-          <GlassCard className="p-8 text-center">
-            <Store className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">Tidak ada pemilik kantin ditemukan</p>
-          </GlassCard>
-        )}
-
-        {/* Add/Edit Modal */}
-        <GlassModal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          title={editingOwner ? "Edit Pemilik Kantin" : "Tambah Pemilik Kantin Baru"}
-        >
-          <div className="space-y-4 p-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nama Pemilik *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Contoh: Ibu Wartini"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <GlassCard className="p-4 sm:p-5 space-y-3">
+          {filteredOwners.map((owner) => (
+            <div key={owner.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="email@example.com"
-                />
+                <p className="font-semibold text-slate-800">{owner.name}</p>
+                <p className="text-sm text-slate-500">{owner.email}</p>
+                <p className="text-sm text-slate-600">Kantin: {owner.canteenName}</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password {editingOwner ? "(opsional)" : "*"}</label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={editingOwner ? "Kosongkan jika tidak diubah" : "Minimal 6 karakter"}
-                />
+              <div className="flex gap-2">
+                <GlassButton size="sm" variant="secondary" onClick={() => openEdit(owner)}>Edit</GlassButton>
+                <GlassButton size="sm" variant="danger" onClick={() => { setSelectedOwner(owner); setShowDeleteModal(true) }}><Trash2 className="w-4 h-4" /></GlassButton>
               </div>
             </div>
+          ))}
+          {filteredOwners.length === 0 && <div className="text-center py-8 text-slate-500">Data pemilik kantin tidak ditemukan.</div>}
+        </GlassCard>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Telepon</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="081234567890"
-              />
-            </div>
+        <GlassModal isOpen={showFormModal} onClose={() => setShowFormModal(false)} title={editingOwner ? "Edit Pemilik Kantin" : "Tambah Pemilik Kantin"}>
+          <div className="space-y-4">
+            <GlassInput placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <GlassInput type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <GlassInput type="password" placeholder={editingOwner ? "Password baru (opsional)" : "Password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <GlassInput placeholder="Nama Kantin" value={form.canteenName} onChange={(e) => setForm({ ...form, canteenName: e.target.value })} />
+            <GlassButton className="w-full" onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} Simpan
+            </GlassButton>
+          </div>
+        </GlassModal>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nama Kantin *</label>
-              <input
-                type="text"
-                value={formData.canteenName}
-                onChange={(e) => setFormData({ ...formData, canteenName: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Contoh: Kantin Bu Wartini"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Deskripsi Kantin</label>
-              <textarea
-                value={formData.canteenDescription}
-                onChange={(e) => setFormData({ ...formData, canteenDescription: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={2}
-                placeholder="Deskripsi singkat tentang kantin..."
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">Status Aktif</span>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-                className={cn(
-                  "relative w-12 h-6 rounded-full transition-colors",
-                  formData.isActive ? "bg-green-500" : "bg-slate-300"
-                )}
-              >
-                <span className={cn(
-                  "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
-                  formData.isActive ? "left-6" : "left-0.5"
-                )} />
-              </button>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="flex-1 py-2.5 px-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-              >
-                {editingOwner ? "Simpan" : "Tambah"}
-              </button>
-            </div>
+        <GlassModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Hapus Pemilik Kantin">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">Yakin ingin menghapus akun pemilik kantin ini?</p>
+            <GlassButton variant="danger" className="w-full" onClick={handleDelete} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />} Hapus
+            </GlassButton>
           </div>
         </GlassModal>
       </div>

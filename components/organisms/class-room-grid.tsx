@@ -5,7 +5,7 @@ import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { Lock, Armchair } from "lucide-react"
-import type { Student, ClassRoom, AttendanceStatus } from "@/lib/mock-data"
+import type { Student, ClassRoom, AttendanceStatus } from "@/lib/data-model"
 import { cn } from "@/lib/utils"
 
 interface ClassRoomGridProps {

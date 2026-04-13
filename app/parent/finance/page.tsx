@@ -1,15 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents,
-  mockClasses,
-  getChildrenByParent,
-  getPaymentsByStudent,
-  type Student,
-} from "@/lib/mock-data"
+import type { Parent, StudentPayment, Student } from "@/lib/data-model"
 import { 
   Wallet, 
   CheckCircle, 
@@ -23,12 +17,43 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function ParentFinancePage() {
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<Parent | null>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [payments, setPayments] = useState<StudentPayment[]>([])
   const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [childClassName, setChildClassName] = useState("")
 
-  const payments = getPaymentsByStudent(selectedChild.id)
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+        const res = await fetch(`/api/parent/child-overview${query}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        setParent(data.parent || null)
+        setChildren(data.children || [])
+        if (data.selectedChild) setSelectedChild(data.selectedChild)
+        setPayments(data.payments || [])
+        setChildClassName(data.childClass?.name || data.selectedChild?.classId || "-")
+      } catch {
+        setParent(null)
+      }
+    }
+
+    fetchOverview()
+  }, [selectedChild?.id])
+
+  if (!parent || !selectedChild) {
+    return (
+      <DashboardLayout role="PARENT" userName="Parent" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto py-8 text-slate-500">Data keuangan belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
+
   const filteredPayments = filterStatus === "all" 
     ? payments 
     : payments.filter(p => p.status === filterStatus)
@@ -60,7 +85,7 @@ export default function ParentFinancePage() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -68,7 +93,7 @@ export default function ParentFinancePage() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild.id ? childClassName : child.classId}</p>
                 </div>
               </button>
             ))}

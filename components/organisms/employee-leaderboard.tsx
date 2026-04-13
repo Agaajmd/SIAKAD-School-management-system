@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/molecules/glass-card"
 import { Star, TrendingUp } from "lucide-react"
-import type { Employee } from "@/lib/mock-data"
+import type { Employee } from "@/lib/data-model"
 
 interface EmployeeLeaderboardProps {
   employees: Employee[]

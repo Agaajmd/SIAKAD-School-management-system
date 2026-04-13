@@ -1,12 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockCanteenOwners,
-  getOrdersByCanteen,
-} from "@/lib/mock-data"
 import { 
   ArrowLeft,
   Wallet,
@@ -20,12 +16,26 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
+type Owner = { id: string; name: string; avatar: string }
+type Order = { id: string; status: string; createdAt: string; totalAmount: number; customerName: string }
+
 export default function CanteenOwnerFinancePage() {
-  const owner = mockCanteenOwners[0]
-  const orders = getOrdersByCanteen(owner.canteenId)
+  const [owner, setOwner] = useState<Owner>({ id: "", name: "Owner", avatar: "/placeholder-user.jpg" })
+  const [orders, setOrders] = useState<Order[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>("today")
 
-  const completedOrders = orders.filter(o => o.status === "COMPLETED")
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch("/api/dashboard/canteen-owner", { cache: "no-store" })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.owner) setOwner(data.owner)
+      if (Array.isArray(data.orders)) setOrders(data.orders)
+    }
+    load().catch(() => {})
+  }, [])
+
+  const completedOrders = useMemo(() => orders.filter((o) => o.status === "COMPLETED"), [orders])
 
   // Calculate revenues
   const todayOrders = completedOrders.filter(o => o.createdAt.startsWith("2025-12-30"))

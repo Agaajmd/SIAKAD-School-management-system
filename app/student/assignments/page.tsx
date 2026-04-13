@@ -5,12 +5,7 @@ import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassButton } from "@/components/atoms/glass-button"
-import { mockStudents, type Task, type TaskSubmission } from "@/lib/mock-data"
-import {
-  getStoredTaskSubmissions,
-  getStoredTasks,
-  setStoredTaskSubmissions,
-} from "@/lib/task-storage"
+import type { Task, TaskSubmission } from "@/lib/data-model"
 import {
   FileText,
   Clock,
@@ -38,7 +33,7 @@ const fileToDataUrl = (file: File) =>
   })
 
 export default function StudentAssignmentsPage() {
-  const student = mockStudents[0]
+  const [student, setStudent] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<TabType>("pending")
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -49,18 +44,27 @@ export default function StudentAssignmentsPage() {
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
 
   useEffect(() => {
-    setAllTasks(getStoredTasks())
-    setAllSubmissions(getStoredTaskSubmissions())
+    const load = async () => {
+      try {
+        const res = await fetch("/api/student/tasks", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        setStudent(data.student || null)
+        setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
+        setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+      } catch {
+        setStudent(null)
+      }
+    }
+
+    load()
   }, [])
 
-  const classTasks = useMemo(
-    () => allTasks.filter((task) => task.classId === (student.classId || "c1")),
-    [allTasks, student.classId],
-  )
+  const classTasks = useMemo(() => allTasks, [allTasks])
 
   const studentSubmissions = useMemo(
-    () => allSubmissions.filter((submission) => submission.studentId === student.id),
-    [allSubmissions, student.id],
+    () => allSubmissions.filter((submission) => submission.studentId === student?.id),
+    [allSubmissions, student?.id],
   )
 
   const getTaskWithSubmission = (task: Task) => {
@@ -122,7 +126,7 @@ export default function StudentAssignmentsPage() {
   }
 
   const handleSubmit = async () => {
-    if (!selectedTask) return
+    if (!selectedTask || !student?.id) return
     if (!submissionLink.trim() && !submissionImageUrl.trim() && !submissionFile) {
       toast.error("Isi minimal satu: file, link, atau URL gambar")
       return
@@ -154,27 +158,30 @@ export default function StudentAssignmentsPage() {
       }
     }
 
-    const nextSubmission: TaskSubmission = {
-      id: existing?.id || `sub-${Date.now()}`,
-      taskId: selectedTask.id,
-      studentId: student.id,
-      submittedAt: new Date().toISOString(),
-      attachmentUrl,
-      imageUrl,
-      attachmentName,
-      status: "SUBMITTED",
-      score: existing?.score,
-      feedback: existing?.feedback,
+    const res = await fetch("/api/student/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: student.id,
+        taskId: selectedTask.id,
+        attachmentUrl,
+        imageUrl,
+        attachmentName,
+      }),
+    })
+
+    if (!res.ok) {
+      toast.error("Gagal mengumpulkan tugas")
+      return
     }
 
+    const data = await res.json()
+    const nextSubmission = data.submission as TaskSubmission
     const nextSubmissions = existing
-      ? allSubmissions.map((submission) =>
-          submission.id === existing.id ? nextSubmission : submission,
-        )
+      ? allSubmissions.map((submission) => (submission.id === existing.id ? nextSubmission : submission))
       : [nextSubmission, ...allSubmissions]
 
     setAllSubmissions(nextSubmissions)
-    setStoredTaskSubmissions(nextSubmissions)
 
     toast.success("Tugas berhasil dikumpulkan!", {
       description: selectedTask.title,
@@ -192,7 +199,7 @@ export default function StudentAssignmentsPage() {
   ]
 
   return (
-    <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
+    <DashboardLayout role="STUDENT" userName={student?.name || "Student"} userAvatar={student?.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-2xl mx-auto space-y-5 px-1">
         <div className="pb-2">
           <h1 className="text-xl font-bold text-slate-800">Tugas Saya</h1>

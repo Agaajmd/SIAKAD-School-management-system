@@ -1,15 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents,
-  mockClasses,
-  getChildrenByParent,
-  getAttendanceByStudent,
-  type Student,
-} from "@/lib/mock-data"
+import type { AttendanceRecord, Parent, Student } from "@/lib/data-model"
 import { 
   CalendarCheck,
   ArrowLeft,
@@ -21,12 +15,37 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function ParentAttendancePage() {
-  const parent = mockParents[0]
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<Parent | null>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [selectedMonth, setSelectedMonth] = useState<string>("2025-12")
+  const [childClassName, setChildClassName] = useState("")
 
-  const attendance = getAttendanceByStudent(selectedChild.id)
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+        const res = await fetch(`/api/parent/child-overview${query}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        setParent(data.parent || null)
+        setChildren(Array.isArray(data.children) ? data.children : [])
+        if (data.selectedChild) {
+          setSelectedChild(data.selectedChild)
+        }
+        setAttendance(data.attendance || [])
+        setChildClassName(data.childClass?.name || data.selectedChild?.classId || "-")
+      } catch {
+        setParent(null)
+      }
+    }
+
+    fetchOverview()
+  }, [selectedChild?.id])
+
   const filteredAttendance = attendance.filter(a => a.date.startsWith(selectedMonth))
 
   const presentCount = filteredAttendance.filter(a => a.status === "PRESENT").length
@@ -42,7 +61,7 @@ export default function ParentAttendancePage() {
   ]
 
   return (
-    <DashboardLayout role="PARENT" userName={parent.name} userAvatar={parent.avatar}>
+    <DashboardLayout role="PARENT" userName={parent?.name || "Parent"} userAvatar={parent?.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-4xl mx-auto space-y-6 px-1">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -64,7 +83,7 @@ export default function ParentAttendancePage() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -72,7 +91,7 @@ export default function ParentAttendancePage() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild?.id ? childClassName : child.classId}</p>
                 </div>
               </button>
             ))}

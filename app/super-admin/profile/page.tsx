@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassInput } from "@/components/atoms/glass-input"
-import { mockSuperAdmins, mockStudents, mockEmployees, mockClasses, mockFinancialData } from "@/lib/mock-data"
 import {
   User,
   Mail,
@@ -26,18 +26,53 @@ import {
 } from "lucide-react"
 
 export default function SuperAdminProfile() {
-  const [superAdmin, setSuperAdmin] = useState(mockSuperAdmins[0])
+  const [superAdmin, setSuperAdmin] = useState({ id: "", name: "Kepala Sekolah", email: "superadmin@school.com", avatar: "/placeholder-user.jpg" })
+  const [studentsCount, setStudentsCount] = useState(0)
+  const [employeesCount, setEmployeesCount] = useState(0)
+  const [classesCount, setClassesCount] = useState(0)
+  const [profit, setProfit] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false)
   const [editForm, setEditForm] = useState({
     name: superAdmin.name,
     email: superAdmin.email,
     phone: "081234567890",
   })
 
-  const totalIncome = mockFinancialData.reduce((acc, d) => acc + d.income, 0)
-  const totalExpenses = mockFinancialData.reduce((acc, d) => acc + d.expenses, 0)
-  const profit = totalIncome - totalExpenses
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const sessionRes = await fetch("/api/auth/session", { cache: "no-store" })
+        const session = sessionRes.ok ? await sessionRes.json() : null
+        const superAdminId = session?.user?.id ? `?superAdminId=${session.user.id}` : ""
+        const res = await fetch(`/api/super-admin/profile${superAdminId}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+
+        if (data.superAdmin) {
+          setSuperAdmin(data.superAdmin)
+          setEditForm((prev) => ({ ...prev, name: data.superAdmin.name || "", email: data.superAdmin.email || "" }))
+        }
+        if (data.stats) {
+          setStudentsCount(Number(data.stats.studentsCount || 0))
+          setEmployeesCount(Number(data.stats.employeesCount || 0))
+          setClassesCount(Number(data.stats.classesCount || 0))
+          setProfit(Number(data.stats.profit || 0))
+        }
+      } catch {
+        // Keep fallback values.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Mock achievements in Indonesian
   const achievements = [
@@ -47,21 +82,66 @@ export default function SuperAdminProfile() {
     { title: "Pembangun Komunitas", icon: GraduationCap, earned: false },
   ]
 
-  const handleSaveProfile = () => {
-    setSuperAdmin({
-      ...superAdmin,
-      name: editForm.name,
-      email: editForm.email,
-    })
-    setShowEditModal(false)
+  const handleSaveProfile = async () => {
+    if (!superAdmin.id || isSavingProfile) return
+    setIsSavingProfile(true)
+    try {
+      const res = await fetch("/api/super-admin/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: superAdmin.id,
+          name: editForm.name,
+          email: editForm.email,
+          avatar: superAdmin.avatar,
+        }),
+      })
+      if (!res.ok) throw new Error()
+
+      setSuperAdmin((prev) => ({ ...prev, name: editForm.name, email: editForm.email }))
+      setShowEditModal(false)
+      toast.success("Profil berhasil diperbarui")
+    } catch {
+      toast.error("Gagal memperbarui profil")
+    } finally {
+      setIsSavingProfile(false)
+    }
   }
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const url = URL.createObjectURL(file)
-      setSuperAdmin({ ...superAdmin, avatar: url })
-      setShowAvatarModal(false)
+    if (file && superAdmin.id) {
+      setIsSavingAvatar(true)
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        const avatar = String(event.target?.result || "")
+        if (!avatar) {
+          setIsSavingAvatar(false)
+          return
+        }
+        try {
+          const res = await fetch("/api/super-admin/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: superAdmin.id,
+              name: superAdmin.name,
+              email: superAdmin.email,
+              avatar,
+            }),
+          })
+          if (!res.ok) throw new Error()
+
+          setSuperAdmin((prev) => ({ ...prev, avatar }))
+          setShowAvatarModal(false)
+          toast.success("Foto profil berhasil diperbarui")
+        } catch {
+          toast.error("Gagal memperbarui foto profil")
+        } finally {
+          setIsSavingAvatar(false)
+        }
+      }
+      reader.readAsDataURL(file)
     }
   }
 
@@ -107,17 +187,17 @@ export default function SuperAdminProfile() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <GlassCard className="text-center py-3">
             <GraduationCap className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-lg font-bold text-slate-800">{mockStudents.length}</p>
+            <p className="text-lg font-bold text-slate-800">{studentsCount}</p>
             <p className="text-xs text-slate-500">Siswa</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
             <Briefcase className="w-5 h-5 mx-auto mb-1 text-emerald-500" />
-            <p className="text-lg font-bold text-slate-800">{mockEmployees.length}</p>
+            <p className="text-lg font-bold text-slate-800">{employeesCount}</p>
             <p className="text-xs text-slate-500">Guru</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
             <School className="w-5 h-5 mx-auto mb-1 text-indigo-500" />
-            <p className="text-lg font-bold text-slate-800">{mockClasses.length}</p>
+            <p className="text-lg font-bold text-slate-800">{classesCount}</p>
             <p className="text-xs text-slate-500">Kelas</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
@@ -289,8 +369,8 @@ export default function SuperAdminProfile() {
           >
             Batal
           </GlassButton>
-          <GlassButton className="flex-1" onClick={handleSaveProfile}>
-            Simpan
+          <GlassButton className="flex-1" onClick={handleSaveProfile} disabled={isSavingProfile}>
+            {isSavingProfile ? "Menyimpan..." : "Simpan"}
           </GlassButton>
         </div>
       </GlassModal>
@@ -326,6 +406,7 @@ export default function SuperAdminProfile() {
         <GlassButton
           variant="ghost"
           className="w-full mt-4"
+          disabled={isSavingAvatar}
           onClick={() => setShowAvatarModal(false)}
         >
           Batal

@@ -1,14 +1,9 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockStudents, 
-  mockClasses, 
-  getEmployeeById,
-  type Student 
-} from "@/lib/mock-data"
 import { 
   Users, 
   GraduationCap, 
@@ -21,11 +16,36 @@ import {
 import { cn } from "@/lib/utils"
 
 export default function StudentClassPage() {
-  // Demo: First student
-  const student = mockStudents[0]
-  const studentClass = mockClasses.find(c => c.id === student.classId)
-  const classmates = mockStudents.filter(s => s.classId === student.classId)
-  const teacher = studentClass ? getEmployeeById(studentClass.teacherId) : undefined
+  const [student, setStudent] = useState<any>(null)
+  const [studentClass, setStudentClass] = useState<any>(null)
+  const [classmates, setClassmates] = useState<any[]>([])
+  const [teacher, setTeacher] = useState<any>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/student/overview", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        setStudent(data.student || null)
+        setStudentClass(data.studentClass || null)
+        setClassmates(Array.isArray(data.classmates) ? data.classmates : [])
+        setTeacher(data.teacher || null)
+      } catch {
+        setStudent(null)
+      }
+    }
+
+    load()
+  }, [])
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="Student" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto py-8 text-slate-500">Data kelas belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   if (!studentClass) {
     return (
@@ -54,9 +74,9 @@ export default function StudentClassPage() {
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5)
   
-  const myRank = [...classmates]
+  const myRank = useMemo(() => [...classmates]
     .sort((a, b) => b.xp - a.xp)
-    .findIndex(s => s.id === student.id) + 1
+    .findIndex(s => s.id === student.id) + 1, [classmates, student.id])
 
   return (
     <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>

@@ -18,6 +18,11 @@ yarn-error.log*
 
 # env files
 .env*
+!.env.example
+
+# local/sensitive docs
+APi-spreadsheets.txt
+GOOGLE_SHEETS_BACKEND_SCHEMA.txt
 
 # vercel
 .vercel

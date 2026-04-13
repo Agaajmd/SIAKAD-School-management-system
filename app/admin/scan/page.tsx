@@ -2,13 +2,12 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassTextarea } from "@/components/atoms/glass-textarea"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { mockAdmins } from "@/lib/mock-data"
 import {
   CheckCircle,
   Clock,
@@ -43,77 +42,9 @@ interface AssetReport {
   resolution?: string
 }
 
-// Mock data for reports from students
-const mockReports: AssetReport[] = [
-  {
-    id: "RPT001",
-    assetId: "MEJA-A101-001",
-    assetName: "Meja Siswa",
-    damageType: "broken",
-    description: "Kaki meja patah, tidak stabil saat digunakan",
-    status: "pending",
-    createdAt: "2025-01-15T08:30:00",
-    location: "Ruang 101",
-    reportedBy: "Ahmad Fadhil",
-    reporterClass: "XII IPA 1",
-  },
-  {
-    id: "RPT002",
-    assetId: "AC-A201-002",
-    assetName: "AC Ruangan",
-    damageType: "malfunctioning",
-    description: "AC tidak dingin, suara berisik saat menyala",
-    status: "in_progress",
-    createdAt: "2025-01-14T10:15:00",
-    location: "Ruang 201",
-    reportedBy: "Sarah Putri",
-    reporterClass: "XI IPS 2",
-    assignedTo: "Pak Teknisi Budi",
-  },
-  {
-    id: "RPT003",
-    assetId: "PROJ-A102-001",
-    assetName: "Proyektor",
-    damageType: "malfunctioning",
-    description: "Gambar buram dan warna tidak normal",
-    status: "resolved",
-    createdAt: "2025-01-10T14:00:00",
-    location: "Ruang 102",
-    reportedBy: "Budi Santoso",
-    reporterClass: "X MIPA 1",
-    resolvedAt: "2025-01-12T16:00:00",
-    resolution: "Lampu proyektor diganti dengan yang baru",
-  },
-  {
-    id: "RPT004",
-    assetId: "KURSI-B102-005",
-    assetName: "Kursi Siswa",
-    damageType: "broken",
-    description: "Sandaran kursi lepas dari dudukan",
-    status: "pending",
-    createdAt: "2025-01-15T09:45:00",
-    location: "Ruang 102",
-    reportedBy: "Dewi Lestari",
-    reporterClass: "XI IPA 3",
-  },
-  {
-    id: "RPT005",
-    assetId: "PAPAN-C201-001",
-    assetName: "Papan Tulis",
-    damageType: "wear",
-    description: "Permukaan papan sudah aus, sulit dihapus",
-    status: "in_progress",
-    createdAt: "2025-01-13T11:30:00",
-    location: "Ruang 201",
-    reportedBy: "Riko Pratama",
-    reporterClass: "XII IPS 1",
-    assignedTo: "Pak Maintenance Andi",
-  },
-]
-
 export default function AdminReportsPage() {
-  const admin = mockAdmins[0]
-  const [reports, setReports] = useState(mockReports)
+  const [admin, setAdmin] = useState({ name: "Admin", avatar: "/placeholder-user.jpg" })
+  const [reports, setReports] = useState<AssetReport[]>([])
   const [selectedReport, setSelectedReport] = useState<AssetReport | null>(null)
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "in_progress" | "resolved">("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -121,6 +52,42 @@ export default function AdminReportsPage() {
   const [actionType, setActionType] = useState<"process" | "resolve">("process")
   const [actionNote, setActionNote] = useState("")
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/admin", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.admin) setAdmin(data.admin)
+        if (Array.isArray(data.reports)) {
+          const normalized: AssetReport[] = data.reports.map((report: any) => ({
+            id: report.id,
+            assetId: report.id,
+            assetName: report.title,
+            damageType: report.type,
+            description: report.title,
+            status: report.status === "in-progress" ? "in_progress" : report.status,
+            createdAt: report.date,
+            location: "Sekolah",
+            reportedBy: report.reporter,
+            reporterClass: "-",
+            assignedTo: report.status === "in-progress" ? "Tim Maintenance" : undefined,
+          }))
+          setReports(normalized)
+        }
+      } catch {
+        // Keep fallback empty data.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const filteredReports = reports.filter((report) => {
     const matchesStatus = filterStatus === "all" || report.status === filterStatus

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { toast } from "sonner"
@@ -8,16 +8,7 @@ import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { useAuth } from "@/lib/auth"
-import { Eye, EyeOff, LogIn, GraduationCap, Lock, Mail, User, Shield, Crown, ArrowLeft } from "lucide-react"
-
-const DEMO_ACCOUNTS = [
-  { role: "Siswa", email: "andi@school.id", password: "student123", icon: User, color: "text-blue-500" },
-  { role: "Guru", email: "ahmad@school.id", password: "guru123", icon: GraduationCap, color: "text-emerald-500" },
-  { role: "Admin", email: "admin@school.id", password: "admin123", icon: Shield, color: "text-amber-500" },
-  { role: "Kepala Sekolah", email: "kepsek@school.id", password: "kepsek123", icon: Crown, color: "text-purple-500" },
-  { role: "Orang Tua", email: "bapak.pratama@gmail.com", password: "parent123", icon: User, color: "text-pink-500" },
-  { role: "Pemilik Kantin", email: "wartini@canteen.id", password: "canteen123", icon: User, color: "text-orange-500" },
-] as const
+import { Eye, EyeOff, LogIn, Lock, Mail, ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -48,11 +39,6 @@ export default function LoginPage() {
       })
     }
   }
-
-  const handleDemoLogin = useCallback((demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail)
-    setPassword(demoPassword)
-  }, [])
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -154,26 +140,6 @@ export default function LoginPage() {
 
             <div className="text-center mt-5 pt-5 border-t border-slate-100">
               <p className="text-slate-500 text-sm">Akun dibuat oleh admin atau super admin.</p>
-            </div>
-          </GlassCard>
-
-          {/* Demo Accounts */}
-          <GlassCard className="p-4 border-slate-200">
-            <p className="text-xs text-slate-500 text-center mb-3">Demo Akun (klik untuk isi otomatis)</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {DEMO_ACCOUNTS.map((demo) => (
-                <button
-                  key={demo.role}
-                  onClick={() => handleDemoLogin(demo.email, demo.password)}
-                  className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 transition-all text-left group"
-                >
-                  <demo.icon className={`w-4 h-4 ${demo.color} group-hover:scale-110 transition-transform`} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-700 truncate">{demo.role}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{demo.email}</p>
-                  </div>
-                </button>
-              ))}
             </div>
           </GlassCard>
 

@@ -1,16 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { 
-  mockCanteenOwners,
-  mockProducts,
-  getProductsByCanteen,
-  type Product,
-  type ProductCategory,
-} from "@/lib/mock-data"
 import { 
   ArrowLeft,
   Plus,
@@ -25,9 +18,23 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+type Owner = { id: string; name: string; avatar: string; canteenId: string }
+type ProductCategory = "MAKANAN" | "MINUMAN" | "SNACK"
+type Product = {
+  id: string
+  canteenId: string
+  name: string
+  description: string
+  price: number
+  image: string
+  category: ProductCategory
+  stock: number
+  isAvailable: boolean
+}
+
 export default function CanteenOwnerProductsPage() {
-  const owner = mockCanteenOwners[0]
-  const [products, setProducts] = useState<Product[]>(getProductsByCanteen(owner.canteenId))
+  const [owner, setOwner] = useState<Owner>({ id: "", name: "Owner", avatar: "/placeholder-user.jpg", canteenId: "" })
+  const [products, setProducts] = useState<Product[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState<string>("all")
   const [showModal, setShowModal] = useState(false)
@@ -40,6 +47,22 @@ export default function CanteenOwnerProductsPage() {
     stock: "",
     isAvailable: true,
   })
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`/api/canteen-owner/products?ownerId=${owner.id}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.owner) setOwner(data.owner)
+        setProducts(data.products || [])
+      } catch {
+        // Keep fallback data on error.
+      }
+    }
+
+    fetchProducts()
+  }, [owner.id])
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -72,51 +95,85 @@ export default function CanteenOwnerProductsPage() {
     setShowModal(true)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.price || !formData.stock) {
       toast.error("Mohon lengkapi semua field yang diperlukan")
       return
     }
 
-    if (editingProduct) {
-      setProducts(products.map(p => p.id === editingProduct.id ? {
-        ...p,
-        name: formData.name,
-        description: formData.description,
-        price: parseInt(formData.price),
-        category: formData.category,
-        stock: parseInt(formData.stock),
-        isAvailable: formData.isAvailable,
-      } : p))
-      toast.success("Produk berhasil diperbarui")
-    } else {
-      const newProduct: Product = {
-        id: `prod${Date.now()}`,
-        canteenId: owner.canteenId,
-        name: formData.name,
-        description: formData.description,
-        price: parseInt(formData.price),
-        image: "/placeholder.svg?height=150&width=150&query=food",
-        category: formData.category,
-        stock: parseInt(formData.stock),
-        isAvailable: formData.isAvailable,
+    try {
+      if (editingProduct) {
+        const res = await fetch(`/api/canteen-owner/products/${editingProduct.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            price: parseInt(formData.price),
+            category: formData.category,
+            stock: parseInt(formData.stock),
+            isAvailable: formData.isAvailable,
+          }),
+        })
+        if (!res.ok) throw new Error("Gagal update")
+        const data = await res.json()
+        setProducts(products.map(p => p.id === editingProduct.id ? data.product : p))
+        toast.success("Produk berhasil diperbarui")
+      } else {
+        const res = await fetch("/api/canteen-owner/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            canteenId: owner.canteenId,
+            name: formData.name,
+            description: formData.description,
+            price: parseInt(formData.price),
+            category: formData.category,
+            stock: parseInt(formData.stock),
+            isAvailable: formData.isAvailable,
+          }),
+        })
+        if (!res.ok) throw new Error("Gagal tambah")
+        const data = await res.json()
+        setProducts([...products, data.product])
+        toast.success("Produk berhasil ditambahkan")
       }
-      setProducts([...products, newProduct])
-      toast.success("Produk berhasil ditambahkan")
+      setShowModal(false)
+    } catch {
+      toast.error("Gagal menyimpan produk")
     }
-    setShowModal(false)
   }
 
-  const handleDelete = (productId: string) => {
+  const handleDelete = async (productId: string) => {
     if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
-      setProducts(products.filter(p => p.id !== productId))
-      toast.success("Produk berhasil dihapus")
+      try {
+        const res = await fetch(`/api/canteen-owner/products/${productId}`, { method: "DELETE" })
+        if (!res.ok) throw new Error("Gagal hapus")
+        setProducts(products.filter(p => p.id !== productId))
+        toast.success("Produk berhasil dihapus")
+      } catch {
+        toast.error("Gagal menghapus produk")
+      }
     }
   }
 
-  const handleToggleAvailability = (productId: string) => {
-    setProducts(products.map(p => p.id === productId ? { ...p, isAvailable: !p.isAvailable } : p))
-    toast.success("Status produk diperbarui")
+  const handleToggleAvailability = async (productId: string) => {
+    const target = products.find((p) => p.id === productId)
+    if (!target) return
+
+    try {
+      const res = await fetch(`/api/canteen-owner/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAvailable: !target.isAvailable }),
+      })
+      if (!res.ok) throw new Error("Gagal update status")
+      const data = await res.json()
+      setProducts(products.map(p => p.id === productId ? data.product : p))
+      toast.success("Status produk diperbarui")
+    } catch {
+      toast.error("Gagal memperbarui status produk")
+    }
   }
 
   const getCategoryColor = (category: ProductCategory) => {

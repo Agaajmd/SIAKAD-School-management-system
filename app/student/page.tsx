@@ -1,21 +1,48 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { WalletCard } from "@/components/organisms/wallet-card"
 import { GamificationStats } from "@/components/organisms/gamification-stats"
 import { NextClassCard } from "@/components/organisms/next-class-card"
 import { AttendanceLeaderboard } from "@/components/organisms/attendance-leaderboard"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
-import { mockStudents, mockSchedule, mockClasses, getEmployeeById } from "@/lib/mock-data"
 
 export default function StudentDashboard() {
-  const student = mockStudents[0]
-  const nextClass = mockSchedule[0]
-  const teacher = getEmployeeById(nextClass.teacherId)
-  
-  // Get the student's class and classmates
-  const studentClass = mockClasses.find(c => c.id === student.classId)
-  const classmates = mockStudents.filter(s => s.classId === student.classId)
+  const [student, setStudent] = useState<any>(null)
+  const [nextClass, setNextClass] = useState<any>(null)
+  const [teacher, setTeacher] = useState<any>(null)
+  const [studentClass, setStudentClass] = useState<any>(null)
+  const [classmates, setClassmates] = useState<any[]>([])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/student/overview", { cache: "no-store" })
+        if (!res.ok) {
+          return
+        }
+        const data = await res.json()
+        setStudent(data.student || null)
+        setNextClass(data.nextClass || null)
+        setTeacher(data.teacher || null)
+        setStudentClass(data.studentClass || null)
+        setClassmates(Array.isArray(data.classmates) ? data.classmates : [])
+      } catch {
+        setStudent(null)
+      }
+    }
+
+    load()
+  }, [])
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="Student" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto px-1 py-8 text-slate-500">Data siswa belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
@@ -46,7 +73,7 @@ export default function StudentDashboard() {
         )}
 
         {/* Attendance Leaderboard */}
-        <AttendanceLeaderboard limit={15} />
+        <AttendanceLeaderboard limit={15} students={classmates} />
       </div>
     </DashboardLayout>
   )

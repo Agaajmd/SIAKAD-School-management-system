@@ -4,7 +4,7 @@ import type React from "react"
 
 import { BottomNavigation } from "@/components/organisms/bottom-navigation"
 import { Sidebar } from "@/components/organisms/sidebar"
-import type { UserRole } from "@/lib/mock-data"
+import type { UserRole } from "@/lib/data-model"
 
 interface DashboardLayoutProps {
   children: React.ReactNode

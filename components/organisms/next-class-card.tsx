@@ -2,14 +2,26 @@
 
 import { GlassCard } from "@/components/molecules/glass-card"
 import { Clock, MapPin, User } from "lucide-react"
-import type { Schedule, Employee } from "@/lib/mock-data"
+import type { Schedule, Employee } from "@/lib/data-model"
 
 interface NextClassCardProps {
-  schedule: Schedule
+  schedule?: Schedule | null
   teacher?: Employee
 }
 
 export const NextClassCard = ({ schedule, teacher }: NextClassCardProps) => {
+  if (!schedule) {
+    return (
+      <GlassCard className="bg-white border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Kelas Berikutnya</span>
+          <span className="px-2.5 py-1 text-xs bg-slate-100 text-slate-500 rounded-lg font-medium">-</span>
+        </div>
+        <h3 className="text-lg font-bold text-slate-800">Belum ada jadwal berikutnya</h3>
+      </GlassCard>
+    )
+  }
+
   return (
     <GlassCard className="bg-white border border-slate-200 shadow-sm">
       <div className="flex items-center justify-between mb-3">

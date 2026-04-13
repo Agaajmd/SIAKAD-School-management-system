@@ -9,7 +9,6 @@ import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { GlassTextarea } from "@/components/atoms/glass-textarea"
 import { GlassButton } from "@/components/atoms/glass-button"
-import { mockStudents } from "@/lib/mock-data"
 import {
   Camera,
   Send,
@@ -21,42 +20,8 @@ import {
   Package,
 } from "lucide-react"
 
-// Mock data for reports
-const mockReports = [
-  {
-    id: "RPT001",
-    assetId: "MEJA-A101-001",
-    assetName: "Meja Siswa",
-    damageType: "broken",
-    description: "Kaki meja patah, tidak stabil saat digunakan",
-    status: "pending",
-    createdAt: "2025-01-15T08:30:00",
-    location: "Ruang 101",
-  },
-  {
-    id: "RPT002",
-    assetId: "AC-A201-002",
-    assetName: "AC Ruangan",
-    damageType: "malfunctioning",
-    description: "AC tidak dingin, suara berisik saat menyala",
-    status: "in_progress",
-    createdAt: "2025-01-14T10:15:00",
-    location: "Ruang 201",
-  },
-  {
-    id: "RPT003",
-    assetId: "PROJ-A102-001",
-    assetName: "Proyektor",
-    damageType: "malfunctioning",
-    description: "Gambar buram dan warna tidak normal",
-    status: "resolved",
-    createdAt: "2025-01-10T14:00:00",
-    location: "Ruang 102",
-  },
-]
-
 export default function StudentReportPage() {
-  const student = mockStudents[0]
+  const [student, setStudent] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<"form" | "history">("form")
   const [assetId, setAssetId] = useState("")
   const [damageType, setDamageType] = useState("")
@@ -64,9 +29,32 @@ export default function StudentReportPage() {
   const [location, setLocation] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
-  const [reports, setReports] = useState(mockReports)
-  const [selectedReport, setSelectedReport] = useState<typeof mockReports[0] | null>(null)
+  const [reports, setReports] = useState<any[]>([])
+  const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const successTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const overviewRes = await fetch("/api/student/overview", { cache: "no-store" })
+        if (!overviewRes.ok) return
+        const overview = await overviewRes.json()
+        if (!overview.student?.id) return
+        setStudent(overview.student)
+
+        const reportsRes = await fetch(`/api/student/reports?studentId=${overview.student.id}`, {
+          cache: "no-store",
+        })
+        if (!reportsRes.ok) return
+        const reportsData = await reportsRes.json()
+        setReports(Array.isArray(reportsData.reports) ? reportsData.reports : [])
+      } catch {
+        setStudent(null)
+      }
+    }
+
+    load()
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -84,22 +72,33 @@ export default function StudentReportPage() {
       return
     }
 
-    setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // Add new report
-    const newReport = {
-      id: `RPT${String(reports.length + 1).padStart(3, "0")}`,
-      assetId,
-      assetName: assetId,
-      damageType,
-      description,
-      status: "pending" as const,
-      createdAt: new Date().toISOString(),
-      location,
+    if (!student?.id) {
+      alert("Data siswa belum siap")
+      return
     }
 
-    setReports((prev) => [newReport, ...prev])
+    setIsSubmitting(true)
+    const res = await fetch("/api/student/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: student.id,
+        assetId,
+        assetName: assetId,
+        damageType,
+        description,
+        location,
+      }),
+    })
+
+    if (!res.ok) {
+      setIsSubmitting(false)
+      alert("Gagal mengirim laporan")
+      return
+    }
+
+    const data = await res.json()
+    setReports((prev) => [data.report, ...prev])
     setShowSuccess(true)
     setAssetId("")
     setDamageType("")
@@ -171,7 +170,7 @@ export default function StudentReportPage() {
   }
 
   return (
-    <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
+    <DashboardLayout role="STUDENT" userName={student?.name || "Student"} userAvatar={student?.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-md mx-auto space-y-6">
         {/* Header */}
         <div className="text-center">

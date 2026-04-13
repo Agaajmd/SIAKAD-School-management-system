@@ -1,14 +1,23 @@
 "use client"
 
 import { GlassCard } from "@/components/molecules/glass-card"
-import type { FinancialData } from "@/lib/mock-data"
+import type { FinancialData } from "@/lib/data-model"
 
 interface FinancialChartProps {
   data: FinancialData[]
 }
 
 export const FinancialChart = ({ data }: FinancialChartProps) => {
-  const maxValue = Math.max(...data.flatMap((d) => [d.income, d.expenses]))
+  if (data.length === 0) {
+    return (
+      <GlassCard>
+        <h3 className="text-lg font-semibold text-slate-800 mb-6">Financial Overview</h3>
+        <div className="h-48 flex items-center justify-center text-sm text-slate-500">Belum ada data keuangan</div>
+      </GlassCard>
+    )
+  }
+
+  const maxValue = Math.max(1, ...data.flatMap((d) => [d.income, d.expenses]))
 
   return (
     <GlassCard>

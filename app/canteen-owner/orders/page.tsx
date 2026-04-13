@@ -1,15 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import { 
-  mockCanteenOwners,
-  getOrdersByCanteen,
-  type Order,
-  type OrderStatus,
-} from "@/lib/mock-data"
 import { 
   ArrowLeft,
   Search,
@@ -24,12 +18,45 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+type OrderStatus = "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED"
+
+type Owner = { id: string; name: string; avatar: string; canteenId: string }
+type OrderItem = { productName: string; quantity: number; price: number }
+type Order = {
+  id: string
+  canteenId: string
+  customerName: string
+  customerRole: string
+  createdAt: string
+  completedAt?: string
+  totalAmount: number
+  status: OrderStatus
+  items: OrderItem[]
+  notes?: string
+}
+
 export default function CanteenOwnerOrdersPage() {
-  const owner = mockCanteenOwners[0]
-  const [orders, setOrders] = useState<Order[]>(getOrdersByCanteen(owner.canteenId))
+  const [owner, setOwner] = useState<Owner>({ id: "", name: "Owner", avatar: "/placeholder-user.jpg", canteenId: "" })
+  const [orders, setOrders] = useState<Order[]>([])
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250)
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const res = await fetch(`/api/canteen-owner/orders?ownerId=${owner.id}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.owner) setOwner(data.owner)
+        setOrders(data.orders || [])
+      } catch {
+        // Keep fallback data on error.
+      }
+    }
+
+    fetchOrders()
+  }, [owner.id])
 
   const filteredOrders = useMemo(() => {
     const query = debouncedSearchQuery.toLowerCase()
@@ -40,13 +67,21 @@ export default function CanteenOwnerOrdersPage() {
     })
   }, [orders, filterStatus, debouncedSearchQuery])
 
-  const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(orders.map(o => o.id === orderId ? { 
-      ...o, 
-      status: newStatus,
-      completedAt: newStatus === "COMPLETED" ? new Date().toISOString() : o.completedAt
-    } : o))
-    toast.success(`Order berhasil di-update ke ${getStatusLabel(newStatus)}`)
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    try {
+      const res = await fetch(`/api/canteen-owner/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!res.ok) throw new Error("Gagal update status")
+      const data = await res.json()
+      setOrders(orders.map(o => o.id === orderId ? data.order : o))
+      toast.success(`Order berhasil di-update ke ${getStatusLabel(newStatus)}`)
+    } catch {
+      toast.error("Gagal update status order")
+    }
   }
 
   const getStatusColor = (status: OrderStatus) => {

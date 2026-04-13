@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/molecules/glass-card"
 import { Flame, Trophy, Star, Zap } from "lucide-react"
-import type { Student } from "@/lib/mock-data"
+import type { Student } from "@/lib/data-model"
 
 interface GamificationStatsProps {
   student: Student

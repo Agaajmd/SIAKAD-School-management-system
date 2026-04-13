@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
-import type { UserRole } from "@/lib/mock-data"
+import type { UserRole } from "@/lib/data-model"
 
 interface SidebarProps {
   role: UserRole

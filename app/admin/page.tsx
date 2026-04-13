@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { mockAdmins, mockStudents, mockEmployees, mockClasses } from "@/lib/mock-data"
 import { 
   AlertTriangle, 
   Wrench, 
@@ -20,28 +19,38 @@ import {
 import Link from "next/link"
 import { toast } from "sonner"
 
-// Mock reports data for operator
-const mockReports = [
-  { id: "r1", type: "damage", title: "AC Rusak di Kelas 10-A", status: "pending", date: "2025-12-20", reporter: "Pak Ahmad", priority: "high" },
-  { id: "r2", type: "facility", title: "Proyektor Mati di Lab", status: "in-progress", date: "2025-12-19", reporter: "Bu Sri", priority: "medium" },
-  { id: "r3", type: "damage", title: "Kursi Patah Ruang 102", status: "resolved", date: "2025-12-18", reporter: "Pak Budi", priority: "low" },
-  { id: "r4", type: "facility", title: "Kebocoran Atap Aula", status: "pending", date: "2025-12-17", reporter: "Bu Maria", priority: "high" },
-  { id: "r5", type: "damage", title: "Papan Tulis Retak", status: "pending", date: "2025-12-16", reporter: "Pak Joko", priority: "medium" },
-]
-
-// Mock inventory data
-const mockInventory = [
-  { id: "i1", name: "Proyektor", total: 25, working: 22, broken: 3 },
-  { id: "i2", name: "AC", total: 40, working: 38, broken: 2 },
-  { id: "i3", name: "Komputer Lab", total: 60, working: 55, broken: 5 },
-  { id: "i4", name: "Meja Siswa", total: 500, working: 485, broken: 15 },
-]
+type AdminUser = { name: string; avatar: string }
+type ReportItem = { id: string; type: string; title: string; status: string; date: string; reporter: string; priority: string }
+type InventoryItem = { id: string; name: string; total: number; working: number; broken: number }
 
 export default function AdminDashboard() {
-  const admin = mockAdmins[0]
-  const [reports, setReports] = useState(mockReports)
-  const [selectedReport, setSelectedReport] = useState<typeof mockReports[0] | null>(null)
+  const [admin, setAdmin] = useState<AdminUser>({ name: "Admin", avatar: "/placeholder-user.jpg" })
+  const [reports, setReports] = useState<ReportItem[]>([])
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null)
   const [activeTab, setActiveTab] = useState<"reports" | "inventory">("reports")
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/admin", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.admin) setAdmin(data.admin)
+        if (Array.isArray(data.reports)) setReports(data.reports)
+        if (Array.isArray(data.inventory)) setInventory(data.inventory)
+      } catch {
+        // Keep fallback mock data when API is unavailable.
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const pendingReports = reports.filter(r => r.status === "pending")
   const inProgressReports = reports.filter(r => r.status === "in-progress")
@@ -51,7 +60,7 @@ export default function AdminDashboard() {
     { icon: AlertTriangle, label: "Laporan Pending", value: pendingReports.length, color: "text-orange-500", bgColor: "bg-orange-50" },
     { icon: Activity, label: "Sedang Diproses", value: inProgressReports.length, color: "text-blue-500", bgColor: "bg-blue-50" },
     { icon: CheckCircle, label: "Selesai", value: resolvedReports.length, color: "text-green-500", bgColor: "bg-green-50" },
-    { icon: PackageCheck, label: "Total Aset", value: mockInventory.reduce((acc, i) => acc + i.total, 0), color: "text-purple-500", bgColor: "bg-purple-50" },
+    { icon: PackageCheck, label: "Total Aset", value: inventory.reduce((acc, i) => acc + i.total, 0), color: "text-purple-500", bgColor: "bg-purple-50" },
   ]
 
   const quickActions = [
@@ -227,7 +236,7 @@ export default function AdminDashboard() {
               </h2>
             </div>
             <div className="divide-y divide-slate-100">
-              {mockInventory.map((item) => (
+              {inventory.map((item) => (
                 <div key={item.id} className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-medium text-slate-800">{item.name}</p>

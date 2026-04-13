@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassInput } from "@/components/atoms/glass-input"
-import { mockAdmins, mockStudents, mockEmployees, mockClasses } from "@/lib/mock-data"
 import {
   User,
   Mail,
@@ -23,41 +22,110 @@ import {
   Save,
 } from "lucide-react"
 
+type AdminUser = { id?: string; name: string; email: string; avatar: string }
+
 export default function AdminProfile() {
-  const [admin, setAdmin] = useState(mockAdmins[0])
+  const [admin, setAdmin] = useState<AdminUser>({
+    name: "Admin",
+    email: "admin@school.com",
+    avatar: "/placeholder-user.jpg",
+  })
+  const [stats, setStats] = useState({ studentsCount: 0, employeesCount: 0, classesCount: 0 })
+  const [recentActivities, setRecentActivities] = useState<Array<{ action: string; time: string; status: string }>>([])
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false)
   const [editForm, setEditForm] = useState({
     name: admin.name,
     email: admin.email,
   })
 
-  // Mock admin activity
-  const recentActivities = [
-    { action: "Menyetujui laporan aset", time: "2 jam lalu", status: "success" },
-    { action: "Memperbarui data siswa", time: "4 jam lalu", status: "success" },
-    { action: "Membuat laporan bulanan", time: "1 hari lalu", status: "success" },
-    { action: "Menyelesaikan masalah pembayaran", time: "2 hari lalu", status: "warning" },
-  ]
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const sessionRes = await fetch("/api/auth/session", { cache: "no-store" })
+        const session = sessionRes.ok ? await sessionRes.json() : null
+        const adminId = session?.user?.id ? `?adminId=${session.user.id}` : ""
+        const res = await fetch(`/api/admin/profile${adminId}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.admin) {
+          setAdmin(data.admin)
+          setEditForm({ name: data.admin.name || "", email: data.admin.email || "" })
+        }
+        if (data.stats) setStats(data.stats)
+        if (Array.isArray(data.recentActivities)) setRecentActivities(data.recentActivities)
+      } catch {
+        // Keep fallback values.
+      }
+    }
 
-  const handleSaveProfile = () => {
-    setAdmin({ ...admin, name: editForm.name, email: editForm.email })
-    setShowEditModal(false)
-    toast.success("Profil berhasil diperbarui")
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const handleSaveProfile = async () => {
+    if (!admin.id || isSavingProfile) return
+    setIsSavingProfile(true)
+    try {
+      const res = await fetch("/api/admin/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: admin.id,
+          name: editForm.name,
+          email: editForm.email,
+          avatar: admin.avatar,
+        }),
+      })
+      if (!res.ok) throw new Error()
+
+      setAdmin((prev) => ({ ...prev, name: editForm.name, email: editForm.email }))
+      setShowEditModal(false)
+      toast.success("Profil berhasil diperbarui")
+    } catch {
+      toast.error("Gagal memperbarui profil")
+    } finally {
+      setIsSavingProfile(false)
+    }
   }
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
+    if (file && admin.id) {
+      setIsSavingAvatar(true)
       const reader = new FileReader()
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const result = e.target?.result as string
-        setAdmin({ ...admin, avatar: result })
-        toast.success("Foto profil berhasil diperbarui")
+        try {
+          const res = await fetch("/api/admin/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: admin.id,
+              name: admin.name,
+              email: admin.email,
+              avatar: result,
+            }),
+          })
+          if (!res.ok) throw new Error()
+
+          setAdmin((prev) => ({ ...prev, avatar: result }))
+          toast.success("Foto profil berhasil diperbarui")
+          setShowAvatarModal(false)
+        } catch {
+          toast.error("Gagal memperbarui foto profil")
+        } finally {
+          setIsSavingAvatar(false)
+        }
       }
       reader.readAsDataURL(file)
     }
-    setShowAvatarModal(false)
   }
 
   return (
@@ -99,17 +167,17 @@ export default function AdminProfile() {
         <div className="grid grid-cols-3 gap-2">
           <GlassCard className="text-center py-3">
             <GraduationCap className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-lg font-bold text-slate-800">{mockStudents.length}</p>
+            <p className="text-lg font-bold text-slate-800">{stats.studentsCount}</p>
             <p className="text-[10px] text-slate-500">Siswa</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
             <Briefcase className="w-5 h-5 mx-auto mb-1 text-emerald-500" />
-            <p className="text-lg font-bold text-slate-800">{mockEmployees.length}</p>
+            <p className="text-lg font-bold text-slate-800">{stats.employeesCount}</p>
             <p className="text-[10px] text-slate-500">Guru</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
             <School className="w-5 h-5 mx-auto mb-1 text-purple-500" />
-            <p className="text-lg font-bold text-slate-800">{mockClasses.length}</p>
+            <p className="text-lg font-bold text-slate-800">{stats.classesCount}</p>
             <p className="text-[10px] text-slate-500">Kelas</p>
           </GlassCard>
         </div>
@@ -225,9 +293,10 @@ export default function AdminProfile() {
           <GlassButton 
             className="flex-1 justify-center" 
             onClick={handleSaveProfile}
+            disabled={isSavingProfile}
           >
             <Save className="w-4 h-4 mr-2" />
-            Simpan
+            {isSavingProfile ? "Menyimpan..." : "Simpan"}
           </GlassButton>
         </div>
       </GlassModal>
@@ -254,6 +323,7 @@ export default function AdminProfile() {
         <GlassButton
           variant="secondary"
           onClick={() => setShowAvatarModal(false)}
+          disabled={isSavingAvatar}
           className="w-full justify-center mt-4"
         >
           Batal

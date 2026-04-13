@@ -1,4 +1,4 @@
-import { mockAdmins, mockCanteenOwners, mockEmployees, mockParents, mockStudents, mockSuperAdmins, type UserRole } from "./mock-data"
+import type { UserRole } from "./data-model"
 
 export interface StoredAuthUser {
   id: string
@@ -9,45 +9,14 @@ export interface StoredAuthUser {
   password: string
 }
 
-const AUTH_USERS_STORAGE_KEY = "aegix_auth_users"
-
-const baseAuthUsers: StoredAuthUser[] = [
-  ...mockStudents.map((s) => ({ ...s, password: "student123" })),
-  ...mockEmployees.map((e) => ({ ...e, password: "guru123" })),
-  ...mockAdmins.map((a) => ({ ...a, password: "admin123" })),
-  ...mockSuperAdmins.map((sa) => ({ ...sa, password: "kepsek123" })),
-  ...mockParents.map((p) => ({ ...p, password: "parent123" })),
-  ...mockCanteenOwners.map((co) => ({ ...co, password: "canteen123" })),
-]
-
-function canUseStorage() {
-  return typeof window !== "undefined"
-}
+const runtimeAuthUsers: StoredAuthUser[] = []
 
 export function getBaseAuthUsers() {
-  return baseAuthUsers
+  return []
 }
 
 export function getStoredAuthUsers(): StoredAuthUser[] {
-  if (!canUseStorage()) {
-    return []
-  }
-
-  try {
-    const raw = localStorage.getItem(AUTH_USERS_STORAGE_KEY)
-    if (!raw) {
-      return []
-    }
-
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed
-  } catch {
-    return []
-  }
+  return [...runtimeAuthUsers]
 }
 
 export function getAllAuthUsers() {
@@ -55,30 +24,20 @@ export function getAllAuthUsers() {
 }
 
 export function upsertAuthUserCredential(user: StoredAuthUser) {
-  if (!canUseStorage()) {
-    return
-  }
-
-  const existing = getStoredAuthUsers()
-  const byId = existing.findIndex((item) => item.id === user.id)
-  const byEmail = existing.findIndex((item) => item.email.toLowerCase() === user.email.toLowerCase())
+  const byId = runtimeAuthUsers.findIndex((item) => item.id === user.id)
+  const byEmail = runtimeAuthUsers.findIndex((item) => item.email.toLowerCase() === user.email.toLowerCase())
   const index = byId >= 0 ? byId : byEmail
 
   if (index >= 0) {
-    existing[index] = user
+    runtimeAuthUsers[index] = user
   } else {
-    existing.push(user)
+    runtimeAuthUsers.push(user)
   }
-
-  localStorage.setItem(AUTH_USERS_STORAGE_KEY, JSON.stringify(existing))
 }
 
 export function removeAuthUserCredential(userId: string) {
-  if (!canUseStorage()) {
-    return
+  const index = runtimeAuthUsers.findIndex((item) => item.id === userId)
+  if (index >= 0) {
+    runtimeAuthUsers.splice(index, 1)
   }
-
-  const existing = getStoredAuthUsers()
-  const filtered = existing.filter((item) => item.id !== userId)
-  localStorage.setItem(AUTH_USERS_STORAGE_KEY, JSON.stringify(filtered))
 }

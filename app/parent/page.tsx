@@ -1,23 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { 
-  mockParents, 
-  mockStudents, 
-  mockStudentPayments, 
-  mockAttendanceRecords, 
-  mockActivityPoints,
-  mockStudentGrades,
-  mockClasses,
-  getChildrenByParent,
-  getPaymentsByStudent,
-  getAttendanceByStudent,
-  getActivityPointsByStudent,
-  getGradesByStudent,
-  type Student,
-} from "@/lib/mock-data"
+import type { Student } from "@/lib/data-model"
 import { 
   Wallet, 
   CreditCard, 
@@ -39,16 +25,53 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function ParentDashboard() {
-  const parent = mockParents[0] // Demo: First parent
-  const children = getChildrenByParent(parent.id)
-  const [selectedChild, setSelectedChild] = useState<Student>(children[0])
+  const [parent, setParent] = useState<any>(null)
+  const [children, setChildren] = useState<Student[]>([])
+  const [selectedChild, setSelectedChild] = useState<Student | null>(null)
+  const [payments, setPayments] = useState<any[]>([])
+  const [attendance, setAttendance] = useState<any[]>([])
+  const [activityPoints, setActivityPoints] = useState<any[]>([])
+  const [grades, setGrades] = useState<any[]>([])
+  const [childClass, setChildClass] = useState<any>(null)
 
-  // Get data for selected child
-  const payments = getPaymentsByStudent(selectedChild.id)
-  const attendance = getAttendanceByStudent(selectedChild.id)
-  const activityPoints = getActivityPointsByStudent(selectedChild.id)
-  const grades = getGradesByStudent(selectedChild.id)
-  const childClass = mockClasses.find(c => c.id === selectedChild.classId)
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const query = selectedChild?.id ? `?childId=${selectedChild.id}` : ""
+        const res = await fetch(`/api/parent/child-overview${query}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        if (data.parent) setParent(data.parent)
+        if (Array.isArray(data.children) && data.children.length > 0) {
+          setChildren(data.children)
+          const selected = data.selectedChild || data.children[0]
+          setSelectedChild(selected)
+        }
+        if (Array.isArray(data.payments)) setPayments(data.payments)
+        if (Array.isArray(data.attendance)) setAttendance(data.attendance)
+        if (Array.isArray(data.activityPoints)) setActivityPoints(data.activityPoints)
+        if (Array.isArray(data.grades)) setGrades(data.grades)
+        setChildClass(data.childClass || null)
+      } catch {
+        setParent(null)
+      }
+    }
+
+    load()
+    return () => {
+      active = false
+    }
+  }, [selectedChild?.id])
+
+  if (!parent || !selectedChild) {
+    return (
+      <DashboardLayout role="PARENT" userName="Parent" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto py-8 text-slate-500">Data parent belum tersedia.</div>
+      </DashboardLayout>
+    )
+  }
 
   // Calculate statistics
   const totalPayments = payments.reduce((acc, p) => acc + p.amount, 0)
@@ -86,7 +109,7 @@ export default function ParentDashboard() {
                 onClick={() => setSelectedChild(child)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all min-w-fit",
-                  selectedChild.id === child.id
+                  selectedChild?.id === child.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 bg-white hover:border-slate-300"
                 )}
@@ -94,7 +117,7 @@ export default function ParentDashboard() {
                 <img src={child.avatar} alt={child.name} className="w-10 h-10 rounded-full object-cover" />
                 <div className="text-left">
                   <p className="font-medium text-slate-800">{child.name}</p>
-                  <p className="text-xs text-slate-500">{mockClasses.find(c => c.id === child.classId)?.name}</p>
+                  <p className="text-xs text-slate-500">{child.id === selectedChild.id ? childClass?.name || child.classId : child.classId}</p>
                 </div>
               </button>
             ))}

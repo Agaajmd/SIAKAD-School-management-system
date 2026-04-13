@@ -2,23 +2,24 @@
 
 import { GlassCard } from "@/components/molecules/glass-card"
 import { Trophy, Medal, Award, Flame, TrendingUp } from "lucide-react"
-import { mockStudents } from "@/lib/mock-data"
+import type { Student } from "@/lib/data-model"
 
 interface AttendanceLeaderboardProps {
   limit?: number
   showTitle?: boolean
+  students?: Student[]
 }
 
 // Calculate attendance score based on streak and attendance status
-const getAttendanceScore = (student: typeof mockStudents[0]) => {
+const getAttendanceScore = (student: Student) => {
   const baseScore = student.attendance === "PRESENT" ? 100 : student.attendance === "SICK" ? 50 : 0
   const streakBonus = student.streak * 5
   return baseScore + streakBonus
 }
 
-export const AttendanceLeaderboard = ({ limit = 15, showTitle = true }: AttendanceLeaderboardProps) => {
+export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students = [] }: AttendanceLeaderboardProps) => {
   // Sort students by attendance score
-  const sortedStudents = [...mockStudents]
+  const sortedStudents = [...students]
     .map(student => ({
       ...student,
       attendanceScore: getAttendanceScore(student),

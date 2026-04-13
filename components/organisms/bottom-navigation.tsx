@@ -30,7 +30,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import { toast } from "sonner"
-import type { UserRole } from "@/lib/mock-data"
+import type { UserRole } from "@/lib/data-model"
 import { BottomSheet, BottomSheetHandle } from "@/components/organisms/bottom-sheet"
 
 interface BottomNavigationProps {

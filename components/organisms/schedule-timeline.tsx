@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/molecules/glass-card"
 import { Clock, MapPin } from "lucide-react"
-import type { Schedule } from "@/lib/mock-data"
+import type { Schedule } from "@/lib/data-model"
 import { cn } from "@/lib/utils"
 
 interface ScheduleTimelineProps {
