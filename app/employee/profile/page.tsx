@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
@@ -65,7 +64,7 @@ export default function EmployeeProfile() {
   }
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Profile Header */}
         <GlassCard className="relative overflow-hidden">
@@ -246,6 +245,6 @@ export default function EmployeeProfile() {
         onSave={handleAvatarSave}
         title="Upload Foto Profil"
       />
-    </DashboardLayout>
+    </>
   )
 }

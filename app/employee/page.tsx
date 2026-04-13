@@ -1,6 +1,5 @@
 "use client"
 
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { AttendanceLeaderboard } from "@/components/organisms/attendance-leaderboard"
 import { mockEmployees, mockSchedule } from "@/lib/mock-data"
@@ -24,7 +23,7 @@ export default function EmployeeDashboard() {
   ]
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Selamat datang,</h1>
@@ -81,6 +80,6 @@ export default function EmployeeDashboard() {
         {/* Attendance Leaderboard */}
         <AttendanceLeaderboard limit={15} />
       </div>
-    </DashboardLayout>
+    </>
   )
 }

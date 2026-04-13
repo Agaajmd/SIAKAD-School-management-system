@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
@@ -167,7 +166,7 @@ export default function TeacherTasksPage() {
     : []
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={teacher.name} userAvatar={teacher.avatar}>
+    <>
       <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -509,6 +508,6 @@ export default function TeacherTasksPage() {
           </div>
         </GlassModal>
       </div>
-    </DashboardLayout>
+    </>
   )
 }

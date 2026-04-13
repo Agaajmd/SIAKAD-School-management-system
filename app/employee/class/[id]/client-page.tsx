@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
 import { GlassToast } from "@/components/molecules/glass-toast"
 import { GlassCard } from "@/components/molecules/glass-card"
@@ -168,7 +167,7 @@ export default function EmployeeClassClient({ id }: ClientPageProps) {
   }, [selectedParent])
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -417,6 +416,6 @@ export default function EmployeeClassClient({ id }: ClientPageProps) {
           type="success"
         />
       </div>
-    </DashboardLayout>
+    </>
   )
 }
