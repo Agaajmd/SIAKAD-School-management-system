@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo, type ComponentType } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { 
@@ -39,6 +39,13 @@ interface BottomNavigationProps {
   userAvatar?: string
 }
 
+interface NavItem {
+  href: string
+  icon: ComponentType<{ className?: string }>
+  label: string
+  activeMatch?: string
+}
+
 export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigationProps) => {
   const pathname = usePathname()
   const router = useRouter()
@@ -47,7 +54,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
   const logoutTimerRef = useRef<number | null>(null)
 
   // Main bottom nav items (limited to 4)
-  const getNavItems = () => {
+  const getNavItems = (): NavItem[] => {
     switch (role) {
       case "STUDENT":
         return [
@@ -60,7 +67,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
         return [
           { href: "/employee", icon: Home, label: "Home" },
           { href: "/employee/assignments", icon: FileText, label: "Tugas" },
-          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas" },
+          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas", activeMatch: "/employee/class" },
           { href: "/employee/grades", icon: Award, label: "Poin" },
         ]
       case "ADMIN":
@@ -74,7 +81,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
         return [
           { href: "/super-admin", icon: Home, label: "Home" },
           { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
-          { href: "/super-admin/staff", icon: Users, label: "Staff" },
+          { href: "/super-admin/staff", icon: Users, label: "Staff", activeMatch: "/super-admin/staff" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
       case "PARENT":
@@ -97,7 +104,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
   }
 
   // All menu items in drawer (same as desktop sidebar)
-  const getAllMenuItems = () => {
+  const getAllMenuItems = (): NavItem[] => {
     switch (role) {
       case "STUDENT":
         return [
@@ -113,7 +120,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/employee", icon: Home, label: "Dashboard" },
           { href: "/employee/assignments", icon: FileText, label: "Kelola Tugas" },
           { href: "/employee/schedule", icon: Calendar, label: "Jadwal" },
-          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas" },
+          { href: "/employee/class/c1", icon: LayoutGrid, label: "Kelas", activeMatch: "/employee/class" },
           { href: "/employee/grades", icon: Award, label: "Poin Keaktifan" },
           { href: "/employee/rapor", icon: BookOpen, label: "AI Rapor" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
@@ -132,7 +139,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
         return [
           { href: "/super-admin", icon: Home, label: "Dashboard" },
           { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
-          { href: "/super-admin/staff", icon: Users, label: "Manajemen Staff" },
+          { href: "/super-admin/staff", icon: Users, label: "Manajemen Staff", activeMatch: "/super-admin/staff" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
       case "PARENT":
@@ -159,6 +166,16 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
 
   const navItems = useMemo(() => getNavItems(), [role])
   const allMenuItems = useMemo(() => getAllMenuItems(), [role])
+
+  const isRouteActive = useCallback(
+    (item: NavItem) => {
+      if (item.activeMatch) {
+        return pathname === item.activeMatch || pathname.startsWith(`${item.activeMatch}/`)
+      }
+      return pathname === item.href
+    },
+    [pathname],
+  )
 
   useEffect(() => {
     return () => {
@@ -241,7 +258,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           <div className="grid grid-cols-3 gap-2 mb-4">
             {allMenuItems.map((item) => {
               const Icon = item.icon
-              const isActive = pathname === item.href
+              const isActive = isRouteActive(item)
               return (
                 <Link
                   key={item.href}
@@ -288,7 +305,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
         <div className="bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-200/60 border border-slate-100 rounded-2xl px-2 py-2">
           <div className="flex items-center justify-around">
             {navItems.slice(0, 4).map((item) => {
-              const isActive = pathname === item.href
+              const isActive = isRouteActive(item)
               const Icon = item.icon
 
               return (

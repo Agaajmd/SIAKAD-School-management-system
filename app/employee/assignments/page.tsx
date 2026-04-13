@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
@@ -220,7 +219,7 @@ export default function EmployeeAssignmentsPage() {
   ]
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="max-w-2xl mx-auto space-y-5 px-1">
         <div className="flex items-center justify-between pb-2">
           <div>
@@ -403,6 +402,6 @@ export default function EmployeeAssignmentsPage() {
           </div>
         )}
       </GlassModal>
-    </DashboardLayout>
+    </>
   )
 }

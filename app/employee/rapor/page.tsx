@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { mockEmployees, mockStudents, mockClasses, type StudentGrade } from "@/lib/mock-data"
@@ -149,7 +148,7 @@ export default function GradingPage() {
   }
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="max-w-5xl mx-auto space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -373,6 +372,6 @@ export default function GradingPage() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   )
 }

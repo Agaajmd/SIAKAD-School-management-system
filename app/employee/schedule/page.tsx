@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { mockEmployees, mockSchedule, mockClasses } from "@/lib/mock-data"
 import { Clock, MapPin, Users, ChevronLeft, ChevronRight } from "lucide-react"
@@ -28,7 +27,7 @@ export default function EmployeeSchedule() {
   const getClassInfo = (classId: string) => mockClasses.find((c) => c.id === classId)
 
   return (
-    <DashboardLayout role="EMPLOYEE" userName={employee.name} userAvatar={employee.avatar}>
+    <>
       <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Teaching Schedule</h1>
@@ -151,6 +150,6 @@ export default function EmployeeSchedule() {
           </div>
         </GlassCard>
       </div>
-    </DashboardLayout>
+    </>
   )
 }
