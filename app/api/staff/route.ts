@@ -15,7 +15,7 @@ import { getSessionUser } from "@/lib/server/session-user"
 type StaffType = "teacher" | "admin"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
 
 function normalizeWhatsappNumber(raw: string) {
   return raw.trim().replace(/[\s-]/g, "")
@@ -33,7 +33,7 @@ export async function GET() {
   const adminMap = new Map(getDbAdmins().map((admin) => [admin.id, admin]))
 
   const teachersFromUsers = users
-    .filter((user) => user.role === "EMPLOYEE" && user.isActive)
+    .filter((user) => user.role === "EMPLOYEE")
     .map((user) => {
       const detail = teacherMap.get(user.id)
       return {
@@ -47,11 +47,12 @@ export async function GET() {
         rating: detail?.rating ?? 0,
         classesCount: detail?.classesCount ?? 0,
         homeroomClassId: detail?.homeroomClassId,
+        isActive: user.isActive,
       }
     })
 
   const adminsFromUsers = users
-    .filter((user) => user.role === "ADMIN" && user.isActive)
+    .filter((user) => user.role === "ADMIN")
     .map((user) => {
       const detail = adminMap.get(user.id)
       return {
@@ -61,6 +62,7 @@ export async function GET() {
         phone: user.phone,
         avatar: detail?.avatar || user.avatar,
         role: "ADMIN" as const,
+        isActive: user.isActive,
       }
     })
 
@@ -78,6 +80,7 @@ export async function GET() {
         rating: teacher.rating,
         classesCount: teacher.classesCount,
         homeroomClassId: teacher.homeroomClassId,
+        isActive: true,
       })
     }
   }
@@ -92,6 +95,7 @@ export async function GET() {
         phone: admin.phone,
         avatar: admin.avatar,
         role: "ADMIN" as const,
+        isActive: true,
       })
     }
   }
@@ -131,7 +135,7 @@ export async function POST(request: Request) {
   }
 
   if (!WHATSAPP_REGEX.test(phone)) {
-    return NextResponse.json({ error: "Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)" }, { status: 400 })
+    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
   }
 
   if (type === "teacher" && !subject) {

@@ -42,6 +42,7 @@ export async function PATCH(request: Request) {
 
   const teachers = getDbTeachers()
   const index = teachers.findIndex((item) => item.id === id)
+  let subject = ""
   let rating = 0
   let classesCount = 0
   let homeroomClassId: string | undefined = undefined

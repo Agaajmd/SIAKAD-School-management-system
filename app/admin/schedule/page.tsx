@@ -5,11 +5,11 @@ import { toast } from "sonner"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
-import { Calendar, Plus, Edit, Trash2, BookOpen, User, MapPin, Search, Save, X, Users, Loader2 } from "lucide-react"
+import { Calendar, Plus, Edit, Trash2, BookOpen, User, Search, Save, X, Users, Loader2 } from "lucide-react"
+import type { FormEvent } from "react"
 
 type Schedule = {
   id: string
@@ -19,7 +19,6 @@ type Schedule = {
   day: string
   startTime: string
   endTime: string
-  room: string
 }
 
 type ClassRoom = { id: string; name: string }
@@ -31,6 +30,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 
 export default function AdminSchedulePage() {
   const [admin, setAdmin] = useState<{ name: string; avatar: string } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [classes, setClasses] = useState<ClassRoom[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -52,35 +52,46 @@ export default function AdminSchedulePage() {
     day: "Monday",
     startTime: "",
     endTime: "",
-    room: "",
   })
 
-  const load = async () => {
-    const res = await fetch("/api/admin/schedule", { cache: "no-store" })
-    if (!res.ok) throw new Error("Gagal memuat data jadwal")
-    const data = await res.json()
-    setAdmin(data.admin || null)
-    setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
-    setClasses(Array.isArray(data.classes) ? data.classes : [])
-    setTeachers(Array.isArray(data.teachers) ? data.teachers : [])
-    setStudents(Array.isArray(data.students) ? data.students : [])
-    setPiketSchedules(Array.isArray(data.piketSchedules) ? data.piketSchedules : [])
-    setFormData((prev) => ({
-      ...prev,
-      classId: data.classes?.[0]?.id || "",
-      teacherId: data.teachers?.[0]?.id || "",
-    }))
+  const load = async (withPageLoader = false) => {
+    try {
+      if (withPageLoader) {
+        setIsLoading(true)
+      }
+      const res = await fetch("/api/admin/schedule", { cache: "no-store" })
+      if (!res.ok) throw new Error("Gagal memuat data jadwal")
+      const data = await res.json()
+      setAdmin(data.admin || null)
+      const nextSchedules = Array.isArray(data.schedules) ? data.schedules : []
+      const nextClasses = Array.isArray(data.classes) ? data.classes : []
+      const nextTeachers = Array.isArray(data.teachers) ? data.teachers : []
+      setSchedules(nextSchedules)
+      setClasses(nextClasses)
+      setTeachers(nextTeachers)
+      setStudents(Array.isArray(data.students) ? data.students : [])
+      setPiketSchedules(Array.isArray(data.piketSchedules) ? data.piketSchedules : [])
+      setFormData((prev) => ({
+        ...prev,
+        classId: nextClasses[0]?.id || "",
+        teacherId: nextTeachers[0]?.id || "",
+      }))
+    } finally {
+      if (withPageLoader) {
+        setIsLoading(false)
+      }
+    }
   }
 
   useEffect(() => {
-    load().catch(() => toast.error("Gagal memuat data"))
+    load(true).catch(() => toast.error("Gagal memuat data"))
   }, [])
 
   const filteredSchedules = useMemo(() => {
     const q = searchQuery.toLowerCase()
     return schedules
       .filter((s) => s.day === selectedDay)
-      .filter((s) => !q || s.subject.toLowerCase().includes(q) || s.room.toLowerCase().includes(q))
+      .filter((s) => !q || s.subject.toLowerCase().includes(q))
       .sort((a, b) => a.startTime.localeCompare(b.startTime))
   }, [schedules, selectedDay, searchQuery])
 
@@ -96,7 +107,6 @@ export default function AdminSchedulePage() {
       day: selectedDay,
       startTime: "",
       endTime: "",
-      room: "",
     })
     setShowModal(true)
   }
@@ -110,13 +120,12 @@ export default function AdminSchedulePage() {
       day: schedule.day,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
-      room: schedule.room,
     })
     setShowModal(true)
   }
 
   const handleSave = async () => {
-    if (!formData.classId || !formData.subject || !formData.teacherId || !formData.startTime || !formData.endTime || !formData.room) {
+    if (!formData.classId || !formData.subject || !formData.teacherId || !formData.startTime || !formData.endTime) {
       toast.error("Semua field wajib diisi")
       return
     }
@@ -131,11 +140,7 @@ export default function AdminSchedulePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal menyimpan jadwal")
 
-      if (editingSchedule) {
-        setSchedules((prev) => prev.map((item) => (item.id === editingSchedule.id ? data.schedule : item)))
-      } else {
-        setSchedules((prev) => [...prev, data.schedule])
-      }
+      await load(false)
 
       toast.success(editingSchedule ? "Jadwal berhasil diperbarui" : "Jadwal berhasil ditambahkan")
       setShowModal(false)
@@ -147,6 +152,11 @@ export default function AdminSchedulePage() {
     }
   }
 
+  const handleScheduleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    await handleSave()
+  }
+
   const handleDelete = async () => {
     if (!scheduleToDelete) return
     setIsSubmitting(true)
@@ -154,7 +164,7 @@ export default function AdminSchedulePage() {
       const res = await fetch(`/api/admin/schedule?id=${scheduleToDelete.id}`, { method: "DELETE" })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal menghapus jadwal")
-      setSchedules((prev) => prev.filter((item) => item.id !== scheduleToDelete.id))
+      await load(false)
       setShowDeleteModal(false)
       setScheduleToDelete(null)
       toast.success("Jadwal berhasil dihapus")
@@ -165,19 +175,21 @@ export default function AdminSchedulePage() {
     }
   }
 
-  if (!admin) {
+  if (isLoading) {
     return <RouteLoading />
   }
 
+  const adminDisplay = admin || { name: "Admin", avatar: "/placeholder-user.jpg" }
+
   return (
-    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar}>
+    <DashboardLayout role="ADMIN" userName={adminDisplay.name} userAvatar={adminDisplay.avatar}>
       <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Manajemen Jadwal</h1>
             <p className="text-sm text-slate-500">Kelola jadwal pelajaran untuk semua kelas</p>
           </div>
-          <GlassButton onClick={openCreate} className="w-full sm:w-auto justify-center">
+          <GlassButton type="button" onClick={openCreate} className="w-full sm:w-auto justify-center">
             <Plus className="w-4 h-4 mr-2" />
             Tambah Jadwal
           </GlassButton>
@@ -215,7 +227,7 @@ export default function AdminSchedulePage() {
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {DAYS.map((day) => (
-            <button key={day} onClick={() => setSelectedDay(day)} className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${selectedDay === day ? "bg-purple-500 text-white shadow-lg" : "bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200"}`}>
+            <button type="button" key={day} onClick={() => setSelectedDay(day)} className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${selectedDay === day ? "bg-purple-500 text-white shadow-lg" : "bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200"}`}>
               {day}
             </button>
           ))}
@@ -224,7 +236,7 @@ export default function AdminSchedulePage() {
         <GlassCard className="p-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <GlassInput placeholder="Cari mata pelajaran atau ruangan..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+            <GlassInput placeholder="Cari mata pelajaran..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
           </div>
         </GlassCard>
 
@@ -242,29 +254,40 @@ export default function AdminSchedulePage() {
                     <h3 className="font-semibold text-slate-800 flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-500" />{schedule.subject}</h3>
                     <p className="text-sm text-slate-500 flex items-center gap-2 mt-1"><User className="w-3 h-3" />{getTeacherName(schedule.teacherId)}</p>
                     <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">
-                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{schedule.room}</span>
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{getClassName(schedule.classId)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2 sm:flex-col">
-                  <GlassButton size="sm" onClick={() => openEdit(schedule)} className="flex-1 sm:flex-none justify-center"><Edit className="w-4 h-4" /></GlassButton>
-                  <GlassButton size="sm" variant="danger" onClick={() => { setScheduleToDelete(schedule); setShowDeleteModal(true) }} className="flex-1 sm:flex-none justify-center"><Trash2 className="w-4 h-4" /></GlassButton>
+                  <GlassButton type="button" size="sm" onClick={() => openEdit(schedule)} className="flex-1 sm:flex-none justify-center"><Edit className="w-4 h-4" /></GlassButton>
+                  <GlassButton type="button" size="sm" variant="danger" onClick={() => { setScheduleToDelete(schedule); setShowDeleteModal(true) }} className="flex-1 sm:flex-none justify-center"><Trash2 className="w-4 h-4" /></GlassButton>
                 </div>
               </div>
             ))}
-            {filteredSchedules.length === 0 && <EmptySkeleton rows={3} className="py-4" />}
+            {filteredSchedules.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
+                Data jadwal belum tersedia
+              </div>
+            )}
           </div>
         </GlassCard>
 
         <GlassModal isOpen={showModal} onClose={() => setShowModal(false)} title={editingSchedule ? "Edit Jadwal" : "Tambah Jadwal Baru"}>
-          <div className="space-y-4">
+          <form className="space-y-4" onSubmit={(event) => { void handleScheduleFormSubmit(event) }}>
             <select value={formData.classId} onChange={(e) => setFormData({ ...formData, classId: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white">
-              {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {classes.length === 0 ? (
+                <option value="">Belum ada data kelas</option>
+              ) : (
+                classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)
+              )}
             </select>
             <GlassInput placeholder="Mata pelajaran" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} />
             <select value={formData.teacherId} onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white">
-              {teachers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {teachers.length === 0 ? (
+                <option value="">Belum ada data guru</option>
+              ) : (
+                teachers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)
+              )}
             </select>
             <select value={formData.day} onChange={(e) => setFormData({ ...formData, day: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white">
               {DAYS.map((day) => <option key={day} value={day}>{day}</option>)}
@@ -273,19 +296,18 @@ export default function AdminSchedulePage() {
               <GlassInput type="time" value={formData.startTime} onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} />
               <GlassInput type="time" value={formData.endTime} onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} />
             </div>
-            <GlassInput placeholder="Ruangan" value={formData.room} onChange={(e) => setFormData({ ...formData, room: e.target.value })} />
-          </div>
-          <div className="flex gap-3 pt-4 mt-4 border-t border-slate-100">
-            <GlassButton variant="secondary" className="flex-1 justify-center" onClick={() => setShowModal(false)} disabled={isSubmitting}><X className="w-4 h-4 mr-2" />Batal</GlassButton>
-            <GlassButton className="flex-1 justify-center" onClick={handleSave} disabled={isSubmitting}>{isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}Simpan</GlassButton>
-          </div>
+            <div className="flex gap-3 pt-4 mt-4 border-t border-slate-100">
+              <GlassButton type="button" variant="secondary" className="flex-1 justify-center" onClick={() => setShowModal(false)} disabled={isSubmitting}><X className="w-4 h-4 mr-2" />Batal</GlassButton>
+              <GlassButton type="submit" className="flex-1 justify-center" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}Simpan</GlassButton>
+            </div>
+          </form>
         </GlassModal>
 
         <GlassModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Hapus Jadwal">
           <p className="text-sm text-slate-600">Yakin ingin menghapus jadwal ini?</p>
           <div className="flex gap-3 pt-4 mt-4 border-t border-slate-100">
-            <GlassButton variant="secondary" className="flex-1 justify-center" onClick={() => setShowDeleteModal(false)} disabled={isSubmitting}>Batal</GlassButton>
-            <GlassButton variant="danger" className="flex-1 justify-center" onClick={handleDelete} disabled={isSubmitting}>{isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}Hapus</GlassButton>
+            <GlassButton type="button" variant="secondary" className="flex-1 justify-center" onClick={() => setShowDeleteModal(false)} disabled={isSubmitting}>Batal</GlassButton>
+            <GlassButton type="button" variant="danger" className="flex-1 justify-center" onClick={handleDelete} disabled={isSubmitting}>{isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}Hapus</GlassButton>
           </div>
         </GlassModal>
       </div>

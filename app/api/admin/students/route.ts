@@ -3,12 +3,19 @@ import { createDbUser } from "@/lib/server/google-sheets-auth"
 import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
 import { logAudit } from "@/lib/server/audit-log"
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
+
+function normalizeWhatsappNumber(raw: string) {
+  return raw.trim().replace(/[\s-]/g, "")
+}
+
 export async function POST(request: Request) {
   const body = await request.json()
   const name = String(body.name || "").trim()
   const email = String(body.email || "").trim().toLowerCase()
   const password = String(body.password || "")
-  const phone = String(body.phone || "").trim()
+  const phone = normalizeWhatsappNumber(String(body.phone || ""))
   const classId = String(body.classId || "").trim()
 
   if (!name || !email || !password || !phone || !classId) {
@@ -17,6 +24,14 @@ export async function POST(request: Request) {
 
   if (password.length < 6) {
     return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+  }
+
+  if (!WHATSAPP_REGEX.test(phone)) {
+    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
   }
 
   const authUser = await createDbUser({

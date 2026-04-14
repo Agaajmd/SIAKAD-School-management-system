@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { getAllDbCanteens } from "@/lib/server/google-sheets-canteens"
 import { getSessionUser } from "@/lib/server/session-user"
 import {
   getDbActivityPoints,
@@ -20,6 +21,7 @@ import {
   getDbSuperAdmins,
   getDbTasks,
   getDbTeachers,
+  setDbCanteens,
 } from "@/lib/server/data-store"
 
 export async function GET(request: Request, { params }: { params: Promise<{ role: string }> }) {
@@ -290,6 +292,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
     }
 
     case "canteen-owner": {
+      const canteensFromSheet = await getAllDbCanteens()
+      setDbCanteens(canteensFromSheet)
       const ownerId = url.searchParams.get("ownerId")
       const ownerUser = ownerId
         ? users.find((user) => user.id === ownerId && user.role === "CANTEEN_OWNER" && user.isActive) || null
@@ -303,7 +307,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
       if (!owner) {
         return NextResponse.json({ error: "Data kantin owner tidak ditemukan" }, { status: 404 })
       }
-      const canteen = getDbCanteens().find((item) => item.id === owner.canteenId) || null
+      const canteen = canteensFromSheet.find((item) => item.ownerId === ownerUser.id) || getDbCanteens().find((item) => item.id === owner.canteenId) || null
       const products = getDbProducts().filter((item) => item.canteenId === owner.canteenId)
       const orders = getDbOrders().filter((item) => item.canteenId === owner.canteenId)
       return NextResponse.json({ owner, canteen, products, orders })
