@@ -98,7 +98,7 @@ export default function SuperAdminProfile() {
       })
       if (!res.ok) throw new Error()
 
-      setSuperAdmin((prev) => ({ ...prev, name: editForm.name, email: editForm.email }))
+      setSuperAdmin((prev) => (prev ? { ...prev, name: editForm.name, email: editForm.email } : prev))
       setShowEditModal(false)
       toast.success("Profil berhasil diperbarui")
     } catch {
@@ -132,7 +132,7 @@ export default function SuperAdminProfile() {
           })
           if (!res.ok) throw new Error()
 
-          setSuperAdmin((prev) => ({ ...prev, avatar }))
+          setSuperAdmin((prev) => (prev ? { ...prev, avatar } : prev))
           setShowAvatarModal(false)
           toast.success("Foto profil berhasil diperbarui")
         } catch {

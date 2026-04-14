@@ -39,6 +39,7 @@ type Order = {
 
 export default function CanteenOwnerOrdersPage() {
   const [owner, setOwner] = useState<Owner | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [orders, setOrders] = useState<Order[]>([])
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -47,18 +48,21 @@ export default function CanteenOwnerOrdersPage() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch(`/api/canteen-owner/orders?ownerId=${owner.id}`, { cache: "no-store" })
+        const ownerQuery = owner?.id ? `?ownerId=${encodeURIComponent(owner.id)}` : ""
+        const res = await fetch(`/api/canteen-owner/orders${ownerQuery}`, { cache: "no-store" })
         if (!res.ok) return
         const data = await res.json()
         if (data.owner) setOwner(data.owner)
         setOrders(data.orders || [])
       } catch {
         // Keep fallback data on error.
+      } finally {
+        setIsLoading(false)
       }
     }
 
     fetchOrders()
-  }, [owner.id])
+  }, [owner?.id])
 
   const filteredOrders = useMemo(() => {
     const query = debouncedSearchQuery.toLowerCase()
@@ -147,8 +151,20 @@ export default function CanteenOwnerOrdersPage() {
     [orders.length, statusCounts],
   )
 
-  if (!owner) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!owner) {
+    return (
+      <DashboardLayout role="CANTEEN_OWNER" userName="Owner" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto px-1">
+          <GlassCard className="p-6 text-center text-slate-600">
+            Data owner tidak ditemukan.
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (

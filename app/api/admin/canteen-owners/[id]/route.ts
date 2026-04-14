@@ -1,59 +1,111 @@
 import { NextResponse } from "next/server"
-import { deactivateDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { deleteDbUserById, getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import {
+  deleteDbCanteenByOwnerId,
+  getAllDbCanteens,
+  updateDbCanteenByOwnerId,
+} from "@/lib/server/google-sheets-canteens"
 import {
   getDbCanteenOwners,
-  getDbCanteens,
   setDbCanteenOwners,
   setDbCanteens,
 } from "@/lib/server/data-store"
 import { logAudit } from "@/lib/server/audit-log"
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
+
+function normalizeWhatsappNumber(raw: string) {
+  return raw.trim().replace(/[\s-]/g, "")
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await request.json()
+  const name = body.name ? String(body.name).trim() : undefined
+  const email = body.email ? String(body.email).trim().toLowerCase() : undefined
+  const phone = body.phone != null ? normalizeWhatsappNumber(String(body.phone)) : undefined
+  const password = body.password ? String(body.password) : undefined
+  const canteenName = body.canteenName ? String(body.canteenName).trim() : undefined
+  const canteenDescription = body.canteenDescription != null ? String(body.canteenDescription).trim() : undefined
+  const isActive = body.isActive != null ? Boolean(body.isActive) : undefined
+
+  if (email && !EMAIL_REGEX.test(email)) {
+    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+  }
+
+  if (phone != null && phone !== "" && !WHATSAPP_REGEX.test(phone)) {
+    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
+  }
+
+  if (password && password.length < 6) {
+    return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
+  }
+
   const owners = getDbCanteenOwners()
   const target = owners.find((item) => item.id === id)
+  const users = await getAllDbUsers()
+  const canteensFromSheet = await getAllDbCanteens()
+  setDbCanteens(canteensFromSheet)
+  const userTarget = users.find((item) => item.id === id && item.role === "CANTEEN_OWNER")
 
-  if (!target) {
+  if (!target && !userTarget) {
     return NextResponse.json({ error: "Pemilik kantin tidak ditemukan" }, { status: 404 })
   }
 
   await updateDbUserById({
     id,
-    name: body.name ? String(body.name) : undefined,
-    email: body.email ? String(body.email) : undefined,
-    password: body.password ? String(body.password) : undefined,
+    name,
+    email,
+    phone,
+    password,
   })
 
-  const nextOwner = {
-    ...target,
-    name: body.name ? String(body.name) : target.name,
-    email: body.email ? String(body.email) : target.email,
-    phone: body.phone != null ? String(body.phone) : target.phone,
-    canteenName: body.canteenName ? String(body.canteenName) : target.canteenName,
-    isActive: body.isActive != null ? Boolean(body.isActive) : target.isActive,
+  const baseTarget = target || {
+    id,
+    name: userTarget?.name || "",
+    email: userTarget?.email || "",
+    avatar: userTarget?.avatar || "/placeholder-user.jpg",
+    role: "CANTEEN_OWNER" as const,
+    canteenId: canteensFromSheet.find((item) => item.ownerId === id)?.id || "",
+    canteenName: canteensFromSheet.find((item) => item.ownerId === id)?.name || "",
+    phone: userTarget?.phone || "",
+    isActive: userTarget?.isActive ?? true,
   }
 
-  setDbCanteenOwners(owners.map((item) => (item.id === id ? nextOwner : item)))
-  setDbCanteens(
-    getDbCanteens().map((item) =>
-      item.ownerId === id
-        ? {
-            ...item,
-            name: body.canteenName ? String(body.canteenName) : item.name,
-            description: body.canteenDescription != null ? String(body.canteenDescription) : item.description,
-            isOpen: body.isActive != null ? Boolean(body.isActive) : item.isOpen,
-          }
-        : item,
-    ),
-  )
+  const nextOwner = {
+    ...baseTarget,
+    name: name || baseTarget.name,
+    email: email || baseTarget.email,
+    phone: phone != null ? phone : baseTarget.phone,
+    canteenName: canteenName || baseTarget.canteenName,
+    isActive: isActive != null ? isActive : baseTarget.isActive,
+  }
+
+  if (target) {
+    setDbCanteenOwners(owners.map((item) => (item.id === id ? nextOwner : item)))
+  } else {
+    setDbCanteenOwners([...owners, nextOwner])
+  }
+  const existingCanteen = canteensFromSheet.find((item) => item.ownerId === id) || null
+  if (existingCanteen) {
+    const updatedCanteen = await updateDbCanteenByOwnerId({
+      ownerId: id,
+      name: canteenName,
+      description: canteenDescription,
+      isOpen: isActive,
+    })
+    setDbCanteens(
+      canteensFromSheet.map((item) => (item.id === updatedCanteen.id ? updatedCanteen : item)),
+    )
+  }
 
   logAudit({
     actorId: id,
     action: "UPDATE",
     entityName: "canteen_owners",
     entityId: id,
-    oldValue: target,
+    oldValue: target || userTarget || null,
     newValue: nextOwner,
   })
 
@@ -64,19 +116,24 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const owners = getDbCanteenOwners()
   const target = owners.find((item) => item.id === id)
-  if (!target) {
+  const users = await getAllDbUsers()
+  const canteensFromSheet = await getAllDbCanteens()
+  setDbCanteens(canteensFromSheet)
+  const userTarget = users.find((item) => item.id === id && item.role === "CANTEEN_OWNER")
+  if (!target && !userTarget) {
     return NextResponse.json({ error: "Pemilik kantin tidak ditemukan" }, { status: 404 })
   }
 
   setDbCanteenOwners(owners.filter((item) => item.id !== id))
-  setDbCanteens(getDbCanteens().filter((item) => item.ownerId !== id))
-  await deactivateDbUserById(id)
+  await deleteDbCanteenByOwnerId(id)
+  setDbCanteens(canteensFromSheet.filter((item) => item.ownerId !== id))
+  await deleteDbUserById(id)
   logAudit({
     actorId: id,
     action: "DELETE",
     entityName: "canteen_owners",
     entityId: id,
-    oldValue: target,
+    oldValue: target || userTarget || null,
     newValue: null,
   })
 

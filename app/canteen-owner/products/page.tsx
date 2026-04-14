@@ -36,6 +36,7 @@ type Product = {
 
 export default function CanteenOwnerProductsPage() {
   const [owner, setOwner] = useState<Owner | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [products, setProducts] = useState<Product[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState<string>("all")
@@ -53,18 +54,21 @@ export default function CanteenOwnerProductsPage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`/api/canteen-owner/products?ownerId=${owner.id}`, { cache: "no-store" })
+        const ownerQuery = owner?.id ? `?ownerId=${encodeURIComponent(owner.id)}` : ""
+        const res = await fetch(`/api/canteen-owner/products${ownerQuery}`, { cache: "no-store" })
         if (!res.ok) return
         const data = await res.json()
         if (data.owner) setOwner(data.owner)
         setProducts(data.products || [])
       } catch {
         // Keep fallback data on error.
+      } finally {
+        setIsLoading(false)
       }
     }
 
     fetchProducts()
-  }, [owner.id])
+  }, [owner?.id])
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -122,6 +126,10 @@ export default function CanteenOwnerProductsPage() {
         setProducts(products.map(p => p.id === editingProduct.id ? data.product : p))
         toast.success("Produk berhasil diperbarui")
       } else {
+        if (!owner) {
+          toast.error("Data owner tidak ditemukan")
+          return
+        }
         const res = await fetch("/api/canteen-owner/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -187,8 +195,20 @@ export default function CanteenOwnerProductsPage() {
     }
   }
 
-  if (!owner) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!owner) {
+    return (
+      <DashboardLayout role="CANTEEN_OWNER" userName="Owner" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-4xl mx-auto px-1">
+          <GlassCard className="p-6 text-center text-slate-600">
+            Data owner tidak ditemukan.
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (

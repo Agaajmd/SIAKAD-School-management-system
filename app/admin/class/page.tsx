@@ -6,12 +6,18 @@ import { openShareChannel } from "@/lib/account-share"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { Edit2, GraduationCap, Loader2, Mail, MessageCircle, MoreVertical, Plus, School, Search, Trash2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
+
+function normalizeWhatsappNumber(value: string) {
+  return value.trim().replace(/[\s-]/g, "")
+}
 
 type ClassRoom = {
   id: string
@@ -64,6 +70,7 @@ const EMPTY_STUDENT_FORM: StudentFormState = {
 
 export default function AdminClassManagement() {
   const [admin, setAdmin] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [classes, setClasses] = useState<ClassRoom[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [searchClass, setSearchClass] = useState("")
@@ -86,21 +93,34 @@ export default function AdminClassManagement() {
   const [isMutatingClass, setIsMutatingClass] = useState(false)
   const [isMutatingStudent, setIsMutatingStudent] = useState(false)
 
-  const load = async () => {
-    const res = await fetch("/api/admin/classes", { cache: "no-store" })
-    if (!res.ok) throw new Error("Gagal memuat data kelas")
-    const data = await res.json()
-    setAdmin(data.admin || null)
-    setClasses(Array.isArray(data.classes) ? data.classes : [])
-    const nextStudents = Array.isArray(data.students) ? data.students : []
-    setStudents(nextStudents)
-    if (!activeClassId && data.classes?.[0]?.id) {
-      setActiveClassId(data.classes[0].id)
+  const load = async (keepLoading = false) => {
+    try {
+      if (!keepLoading) {
+        setIsLoading(true)
+      }
+      const res = await fetch("/api/admin/classes", { cache: "no-store" })
+      if (!res.ok) throw new Error("Gagal memuat data kelas")
+      const data = await res.json()
+      const nextClasses = Array.isArray(data.classes) ? data.classes : []
+      setAdmin(data.admin || null)
+      setClasses(nextClasses)
+      const nextStudents = Array.isArray(data.students) ? data.students : []
+      setStudents(nextStudents)
+
+      const hasActiveClass = nextClasses.some((item: ClassRoom) => item.id === activeClassId)
+      if ((!activeClassId || !hasActiveClass) && nextClasses[0]?.id) {
+        setActiveClassId(nextClasses[0].id)
+      }
+      if (nextClasses.length === 0) {
+        setActiveClassId("")
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    load().catch(() => toast.error("Gagal memuat data"))
+    load(true).catch(() => toast.error("Gagal memuat data"))
   }, [])
 
   const filteredClasses = useMemo(() => {
@@ -123,8 +143,16 @@ export default function AdminClassManagement() {
   const resetClassForm = () => setClassForm(EMPTY_CLASS_FORM)
 
   const handleCreateClass = async () => {
-    if (!classForm.name || !classForm.grade) {
+    const name = classForm.name.trim()
+    const grade = classForm.grade.trim()
+
+    if (!name || !grade) {
       toast.error("Nama dan grade kelas wajib diisi")
+      return
+    }
+
+    if (classForm.rows <= 0 || classForm.cols <= 0) {
+      toast.error("Rows dan cols harus lebih dari 0")
       return
     }
 
@@ -133,13 +161,13 @@ export default function AdminClassManagement() {
       const res = await fetch("/api/admin/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(classForm),
+        body: JSON.stringify({ ...classForm, name, grade }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal membuat kelas")
 
-      setClasses((prev) => [...prev, data.classItem])
-      setActiveClassId(data.classItem.id)
+      await load(true)
+      setActiveClassId(data.classItem?.id || "")
       setShowCreateClassModal(false)
       resetClassForm()
       toast.success("Kelas berhasil dibuat")
@@ -174,7 +202,7 @@ export default function AdminClassManagement() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal update kelas")
 
-      setClasses((prev) => prev.map((item) => (item.id === selectedClass.id ? data.classItem : item)))
+      await load(true)
       setShowEditClassModal(false)
       setSelectedClass(null)
       resetClassForm()
@@ -195,8 +223,7 @@ export default function AdminClassManagement() {
       if (!res.ok) throw new Error(data?.error || "Gagal menghapus kelas")
 
       const deletedId = selectedClass.id
-      setClasses((prev) => prev.filter((item) => item.id !== deletedId))
-      setStudents((prev) => prev.filter((item) => item.classId !== deletedId))
+      await load(true)
       setActiveClassId((prev) => (prev === deletedId ? "" : prev))
       setShowDeleteClassModal(false)
       setSelectedClass(null)
@@ -225,8 +252,32 @@ export default function AdminClassManagement() {
   }
 
   const handleSaveStudent = async () => {
-    if (!studentForm.name || !studentForm.email || !studentForm.phone || (!editingStudent && !studentForm.password)) {
+    const name = studentForm.name.trim()
+    const email = studentForm.email.trim().toLowerCase()
+    const normalizedPhone = normalizeWhatsappNumber(studentForm.phone)
+
+    if (!name || !email || !normalizedPhone || (!editingStudent && !studentForm.password)) {
       toast.error("Nama, email, nomor WhatsApp, dan password wajib diisi")
+      return
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      toast.error("Format email tidak valid")
+      return
+    }
+
+    if (!WHATSAPP_REGEX.test(normalizedPhone)) {
+      toast.error("Format nomor WhatsApp Indonesia tidak valid")
+      return
+    }
+
+    if (!editingStudent && studentForm.password.length < 6) {
+      toast.error("Password minimal 6 karakter")
+      return
+    }
+
+    if (editingStudent && studentForm.password && studentForm.password.length < 6) {
+      toast.error("Password minimal 6 karakter")
       return
     }
 
@@ -237,16 +288,16 @@ export default function AdminClassManagement() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: studentForm.name,
-            email: studentForm.email,
-            phone: studentForm.phone,
+            name,
+            email,
+            phone: normalizedPhone,
             password: studentForm.password || undefined,
             classId: activeClassId,
           }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal update siswa")
-        setStudents((prev) => prev.map((item) => (item.id === editingStudent.id ? data.student : item)))
+        await load(true)
         if (studentForm.password) {
           setKnownStudentPasswords((prev) => ({ ...prev, [editingStudent.id]: studentForm.password }))
         }
@@ -256,16 +307,16 @@ export default function AdminClassManagement() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: studentForm.name,
-            email: studentForm.email,
-            phone: studentForm.phone,
+            name,
+            email,
+            phone: normalizedPhone,
             password: studentForm.password,
             classId: activeClassId,
           }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal menambah siswa")
-        setStudents((prev) => [...prev, data.student])
+        await load(true)
         setKnownStudentPasswords((prev) => ({ ...prev, [data.student.id]: studentForm.password }))
         toast.success("Siswa berhasil ditambahkan")
       }
@@ -287,7 +338,7 @@ export default function AdminClassManagement() {
       const res = await fetch(`/api/admin/students/${selectedStudent.id}`, { method: "DELETE" })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal menghapus siswa")
-      setStudents((prev) => prev.filter((item) => item.id !== selectedStudent.id))
+      await load(true)
       setShowDeleteStudentModal(false)
       setSelectedStudent(null)
       toast.success("Siswa berhasil dihapus")
@@ -319,12 +370,17 @@ export default function AdminClassManagement() {
 
   const totalSeats = classes.reduce((acc, cls) => acc + cls.rows * cls.cols, 0)
 
-  if (!admin) {
+  if (isLoading) {
     return <RouteLoading />
   }
 
+  const adminDisplay = admin || {
+    name: "Admin",
+    avatar: "/placeholder-user.jpg",
+  }
+
   return (
-    <DashboardLayout role="ADMIN" userName={admin.name} userAvatar={admin.avatar || "/placeholder-user.jpg"}>
+    <DashboardLayout role="ADMIN" userName={adminDisplay.name} userAvatar={adminDisplay.avatar || "/placeholder-user.jpg"}>
       <div className="max-w-6xl mx-auto space-y-6 px-1">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -349,6 +405,12 @@ export default function AdminClassManagement() {
             <GlassInput type="text" placeholder="Cari kelas..." value={searchClass} onChange={(event) => setSearchClass(event.target.value)} className="pl-10" />
           </div>
         </GlassCard>
+
+        {filteredClasses.length === 0 && (
+          <GlassCard className="p-6 text-center text-slate-500">
+            Data kelas belum tersedia.
+          </GlassCard>
+        )}
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredClasses.map((classItem) => {
@@ -408,17 +470,33 @@ export default function AdminClassManagement() {
                 </div>
               </div>
             ))}
-            {studentsInActiveClass.length === 0 && <EmptySkeleton rows={3} className="py-4" />}
+            {studentsInActiveClass.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
+                Data belum tersedia
+              </div>
+            )}
           </div>
         </GlassCard>
 
         <GlassModal isOpen={showCreateClassModal} onClose={() => setShowCreateClassModal(false)} title="Tambah Kelas">
           <div className="space-y-4">
-            <GlassInput placeholder="Nama kelas" value={classForm.name} onChange={(e) => setClassForm({ ...classForm, name: e.target.value })} />
-            <GlassInput placeholder="Grade" value={classForm.grade} onChange={(e) => setClassForm({ ...classForm, grade: e.target.value })} />
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Nama kelas</label>
+              <GlassInput placeholder="Contoh: Kelas A" value={classForm.name} onChange={(e) => setClassForm({ ...classForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Grade</label>
+              <GlassInput placeholder="Contoh: 11" value={classForm.grade} onChange={(e) => setClassForm({ ...classForm, grade: e.target.value })} />
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              <GlassInput type="number" placeholder="Rows" value={String(classForm.rows)} onChange={(e) => setClassForm({ ...classForm, rows: Number(e.target.value || 5) })} />
-              <GlassInput type="number" placeholder="Cols" value={String(classForm.cols)} onChange={(e) => setClassForm({ ...classForm, cols: Number(e.target.value || 5) })} />
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">Rows</label>
+                <GlassInput type="number" min={1} placeholder="5" value={String(classForm.rows)} onChange={(e) => setClassForm({ ...classForm, rows: Number(e.target.value || 5) })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">Cols</label>
+                <GlassInput type="number" min={1} placeholder="5" value={String(classForm.cols)} onChange={(e) => setClassForm({ ...classForm, cols: Number(e.target.value || 5) })} />
+              </div>
             </div>
             <GlassButton className="w-full" onClick={handleCreateClass} disabled={isMutatingClass}>
               {isMutatingClass ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} Buat Kelas
@@ -428,8 +506,14 @@ export default function AdminClassManagement() {
 
         <GlassModal isOpen={showEditClassModal} onClose={() => setShowEditClassModal(false)} title="Edit Kelas">
           <div className="space-y-4">
-            <GlassInput placeholder="Nama kelas" value={classForm.name} onChange={(e) => setClassForm({ ...classForm, name: e.target.value })} />
-            <GlassInput placeholder="Grade" value={classForm.grade} onChange={(e) => setClassForm({ ...classForm, grade: e.target.value })} />
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Nama kelas</label>
+              <GlassInput placeholder="Contoh: Kelas A" value={classForm.name} onChange={(e) => setClassForm({ ...classForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Grade</label>
+              <GlassInput placeholder="Contoh: 11" value={classForm.grade} onChange={(e) => setClassForm({ ...classForm, grade: e.target.value })} />
+            </div>
             <GlassButton className="w-full" onClick={handleUpdateClass} disabled={isMutatingClass}>
               {isMutatingClass ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Edit2 className="w-4 h-4 mr-2" />} Simpan Perubahan
             </GlassButton>
@@ -446,15 +530,27 @@ export default function AdminClassManagement() {
         </GlassModal>
 
         <GlassModal isOpen={showStudentModal} onClose={() => setShowStudentModal(false)} title={editingStudent ? "Edit Siswa" : "Tambah Siswa"}>
-          <div className="space-y-4">
-            <GlassInput placeholder="Nama siswa" value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })} />
-            <GlassInput type="email" placeholder="Email siswa" value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} />
-            <GlassInput type="tel" placeholder="Nomor WhatsApp siswa" value={studentForm.phone} onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })} />
-            <GlassInput type="password" placeholder={editingStudent ? "Password baru (opsional)" : "Password"} value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })} />
-            <GlassButton className="w-full" onClick={handleSaveStudent} disabled={isMutatingStudent}>
+          <form className="space-y-4" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void handleSaveStudent() }}>
+            <div className="space-y-1">
+              <label htmlFor="student-name" className="text-sm font-medium text-slate-700">Nama siswa</label>
+              <GlassInput id="student-name" name="student_name" placeholder="Masukkan nama lengkap siswa" autoComplete="off" value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="student-email" className="text-sm font-medium text-slate-700">Email</label>
+              <GlassInput id="student-email" name="student_email" type="email" placeholder="Masukkan email siswa" autoComplete="off" value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="student-phone" className="text-sm font-medium text-slate-700">Nomor WhatsApp</label>
+              <GlassInput id="student-phone" name="student_phone" type="tel" inputMode="tel" placeholder="Contoh: +6281234567890" autoComplete="off" value={studentForm.phone} onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="student-password" className="text-sm font-medium text-slate-700">{editingStudent ? "Password baru (opsional)" : "Password"}</label>
+              <GlassInput id="student-password" name="student_password" type="password" placeholder={editingStudent ? "Kosongkan jika tidak diubah" : "Minimal 6 karakter"} autoComplete="new-password" value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })} />
+            </div>
+            <GlassButton type="submit" className="w-full" disabled={isMutatingStudent}>
               {isMutatingStudent ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} Simpan Siswa
             </GlassButton>
-          </div>
+          </form>
         </GlassModal>
 
         <GlassModal isOpen={showDeleteStudentModal} onClose={() => setShowDeleteStudentModal(false)} title="Hapus Siswa">

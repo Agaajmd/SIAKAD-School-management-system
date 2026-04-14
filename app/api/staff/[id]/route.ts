@@ -13,7 +13,7 @@ import {
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
 
 function normalizeWhatsappNumber(raw: string) {
   return raw.trim().replace(/[\s-]/g, "")
@@ -22,7 +22,7 @@ function normalizeWhatsappNumber(raw: string) {
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const users = await getAllDbUsers()
-  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
+  const targetUser = users.find((item) => item.id === id && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
   const teacher = getDbTeachers().find((item) => item.id === id)
   const admin = getDbAdmins().find((item) => item.id === id)
 
@@ -82,7 +82,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const users = await getAllDbUsers()
-  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
+  const targetUser = users.find((item) => item.id === id && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
   const body = (await request.json()) as {
     type?: "teacher" | "admin"
     name?: string
@@ -114,7 +114,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   if (!WHATSAPP_REGEX.test(phone)) {
-    return NextResponse.json({ error: "Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)" }, { status: 400 })
+    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
   }
 
   if (password && password.length < 6) {
@@ -210,7 +210,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const users = await getAllDbUsers()
-  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
+  const targetUser = users.find((item) => item.id === id && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
 
   const teacher = getDbTeachers().find((item) => item.id === id)
   const admin = getDbAdmins().find((item) => item.id === id)

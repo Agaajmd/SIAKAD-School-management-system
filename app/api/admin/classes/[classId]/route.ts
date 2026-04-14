@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import { deleteDbUserById, getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { deleteDbClassById, getAllDbClasses, updateDbClassById } from "@/lib/server/google-sheets-classes"
 import {
-  getDbClasses,
   getDbStudents,
   setDbClasses,
   setDbStudents,
@@ -11,20 +12,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ cl
   const { classId } = await params
   const body = await request.json()
 
-  const classes = getDbClasses()
+  const classes = await getAllDbClasses()
   const target = classes.find((item) => item.id === classId)
   if (!target) {
     return NextResponse.json({ error: "Kelas tidak ditemukan" }, { status: 404 })
   }
 
-  const next = {
-    ...target,
-    name: body.name ? String(body.name) : target.name,
-    grade: body.grade ? String(body.grade) : target.grade,
-    rows: body.rows != null ? Number(body.rows) : target.rows,
-    cols: body.cols != null ? Number(body.cols) : target.cols,
-    teacherId: body.teacherId != null ? String(body.teacherId) : target.teacherId,
-  }
+  const next = await updateDbClassById({
+    id: classId,
+    name: body.name ? String(body.name) : undefined,
+    grade: body.grade ? String(body.grade) : undefined,
+    rows: body.rows != null ? Number(body.rows) : undefined,
+    cols: body.cols != null ? Number(body.cols) : undefined,
+    teacherId: body.teacherId != null ? String(body.teacherId) : undefined,
+  })
 
   setDbClasses(classes.map((item) => (item.id === classId ? next : item)))
   logAudit({
@@ -40,12 +41,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ cl
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ classId: string }> }) {
   const { classId } = await params
-  const classes = getDbClasses()
+  const classes = await getAllDbClasses()
   const target = classes.find((item) => item.id === classId)
   if (!target) {
     return NextResponse.json({ error: "Kelas tidak ditemukan" }, { status: 404 })
   }
 
+  const users = await getAllDbUsers()
+  const studentsInClass = users.filter(
+    (user) => user.role === "STUDENT" && user.classId === classId,
+  )
+
+  await Promise.all(studentsInClass.map((student) => deleteDbUserById(student.id)))
+  await deleteDbClassById(classId)
   setDbClasses(classes.filter((item) => item.id !== classId))
   setDbStudents(getDbStudents().filter((student) => student.classId !== classId))
   logAudit({

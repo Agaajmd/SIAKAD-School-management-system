@@ -1,41 +1,82 @@
 import { NextResponse } from "next/server"
-import { deactivateDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { deleteDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
 import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
 import { logAudit } from "@/lib/server/audit-log"
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
+
+function normalizeWhatsappNumber(raw: string) {
+  return raw.trim().replace(/[\s-]/g, "")
+}
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await request.json()
+  const nextName = body.name ? String(body.name).trim() : undefined
+  const nextEmail = body.email ? String(body.email).trim().toLowerCase() : undefined
+  const nextPhone = body.phone != null ? normalizeWhatsappNumber(String(body.phone)) : undefined
+  const nextPassword = body.password ? String(body.password) : undefined
+
+  if (nextEmail && !EMAIL_REGEX.test(nextEmail)) {
+    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+  }
+
+  if (nextPhone != null && nextPhone !== "" && !WHATSAPP_REGEX.test(nextPhone)) {
+    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
+  }
+
+  if (nextPassword && nextPassword.length < 6) {
+    return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
+  }
 
   const students = getDbStudents()
   const target = students.find((item) => item.id === id)
-  if (!target) {
+  const users = await getAllDbUsers()
+  const userTarget = users.find((item) => item.id === id && item.role === "STUDENT" && item.isActive)
+  if (!target && !userTarget) {
     return NextResponse.json({ error: "Siswa tidak ditemukan" }, { status: 404 })
   }
 
   await updateDbUserById({
     id,
-    name: body.name ? String(body.name) : undefined,
-    email: body.email ? String(body.email) : undefined,
-    phone: body.phone ? String(body.phone) : undefined,
-    password: body.password ? String(body.password) : undefined,
+    name: nextName,
+    email: nextEmail,
+    phone: nextPhone,
+    password: nextPassword,
   })
 
   const next = {
-    ...target,
-    name: body.name ? String(body.name) : target.name,
-    email: body.email ? String(body.email) : target.email,
-    phone: body.phone ? String(body.phone) : target.phone,
-    classId: body.classId ? String(body.classId) : target.classId,
+    id,
+    name: nextName || (target?.name || userTarget?.name || ""),
+    email: nextEmail || (target?.email || userTarget?.email || ""),
+    phone: nextPhone != null ? nextPhone : (target?.phone || userTarget?.phone),
+    avatar: target?.avatar || userTarget?.avatar || "/placeholder-user.jpg",
+    role: "STUDENT" as const,
+    classId: body.classId ? String(body.classId) : (target?.classId || userTarget?.classId || ""),
+    paymentStatus: target?.paymentStatus || "UNPAID" as const,
+    behaviorScore: target?.behaviorScore ?? 100,
+    attendance: target?.attendance || "PRESENT" as const,
+    seatRow: target?.seatRow ?? 0,
+    seatCol: target?.seatCol ?? 0,
+    coins: target?.coins ?? 0,
+    streak: target?.streak ?? 0,
+    level: target?.level ?? 1,
+    xp: target?.xp ?? 0,
   }
 
-  setDbStudents(students.map((item) => (item.id === id ? next : item)))
+  if (target) {
+    setDbStudents(students.map((item) => (item.id === id ? next : item)))
+  } else {
+    setDbStudents([...students, next])
+  }
   logAudit({
     actorId: id,
     action: "UPDATE",
     entityName: "students",
     entityId: id,
-    oldValue: target,
+    oldValue: target || userTarget || null,
     newValue: next,
   })
 
@@ -46,18 +87,20 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const students = getDbStudents()
   const target = students.find((item) => item.id === id)
-  if (!target) {
+  const users = await getAllDbUsers()
+  const userTarget = users.find((item) => item.id === id && item.role === "STUDENT")
+  if (!target && !userTarget) {
     return NextResponse.json({ error: "Siswa tidak ditemukan" }, { status: 404 })
   }
 
   setDbStudents(students.filter((item) => item.id !== id))
-  await deactivateDbUserById(id)
+  await deleteDbUserById(id)
   logAudit({
     actorId: id,
     action: "DELETE",
     entityName: "students",
     entityId: id,
-    oldValue: target,
+    oldValue: target || userTarget || null,
     newValue: null,
   })
 

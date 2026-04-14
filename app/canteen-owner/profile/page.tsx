@@ -31,7 +31,13 @@ export default function CanteenOwnerProfilePage() {
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSavingAvatar, setIsSavingAvatar] = useState(false)
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" })
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    canteenName: "",
+    canteenDescription: "",
+  })
 
   useEffect(() => {
     const load = async () => {
@@ -48,10 +54,14 @@ export default function CanteenOwnerProfilePage() {
         const ownerData = await ownerRes.json()
         if (ownerData.owner) {
           setOwner(ownerData.owner)
+          const canteenName = String(ownerData.owner.canteenName || "")
+          const canteenDescription = String(ownerData.owner.canteenDescription || "")
           setEditForm({
             name: ownerData.owner.name || "",
             email: ownerData.owner.email || "",
             phone: ownerData.owner.phone || "",
+            canteenName,
+            canteenDescription,
           })
         }
       }
@@ -65,7 +75,7 @@ export default function CanteenOwnerProfilePage() {
   }, [])
 
   const handleSaveProfile = async () => {
-    if (!owner.id || isSavingProfile) return
+    if (!owner || isSavingProfile) return
     setIsSavingProfile(true)
     try {
       const res = await fetch("/api/canteen-owner/profile", {
@@ -76,12 +86,32 @@ export default function CanteenOwnerProfilePage() {
           name: editForm.name,
           email: editForm.email,
           phone: editForm.phone,
+          canteenName: editForm.canteenName,
+          canteenDescription: editForm.canteenDescription,
           avatar: owner.avatar,
         }),
       })
       if (!res.ok) throw new Error()
 
-      setOwner((prev) => ({ ...prev, ...editForm }))
+      setOwner((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: editForm.name,
+              email: editForm.email,
+              phone: editForm.phone,
+            }
+          : prev,
+      )
+      setCanteen((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: editForm.canteenName,
+              description: editForm.canteenDescription,
+            }
+          : prev,
+      )
       setShowEditModal(false)
       toast.success("Profil berhasil diperbarui")
     } catch {
@@ -97,7 +127,7 @@ export default function CanteenOwnerProfilePage() {
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !owner.id || isSavingAvatar) return
+    if (!file || !owner || isSavingAvatar) return
 
     setIsSavingAvatar(true)
     const reader = new FileReader()
@@ -122,7 +152,7 @@ export default function CanteenOwnerProfilePage() {
         })
         if (!res.ok) throw new Error()
 
-        setOwner((prev) => ({ ...prev, avatar }))
+        setOwner((prev) => (prev ? { ...prev, avatar } : prev))
         setShowAvatarModal(false)
         toast.success("Foto profil berhasil diperbarui")
       } catch {
@@ -241,7 +271,13 @@ export default function CanteenOwnerProfilePage() {
         <GlassButton
           className="w-full py-3"
           onClick={() => {
-            setEditForm({ name: owner.name || "", email: owner.email || "", phone: owner.phone || "" })
+            setEditForm({
+              name: owner.name || "",
+              email: owner.email || "",
+              phone: owner.phone || "",
+              canteenName: canteen?.name || "",
+              canteenDescription: canteen?.description || "",
+            })
             setShowEditModal(true)
           }}
         >
@@ -263,6 +299,14 @@ export default function CanteenOwnerProfilePage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nomor Telepon</label>
             <GlassInput value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nama Kantin</label>
+            <GlassInput value={editForm.canteenName} onChange={(e) => setEditForm({ ...editForm, canteenName: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Deskripsi Kantin</label>
+            <GlassInput value={editForm.canteenDescription} onChange={(e) => setEditForm({ ...editForm, canteenDescription: e.target.value })} />
           </div>
         </div>
 

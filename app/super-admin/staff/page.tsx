@@ -35,11 +35,11 @@ import {
 } from "lucide-react"
 
 type StaffFilterType = "all" | "teacher" | "admin"
-type StaffItem = Employee | User
+type StaffItem = (Employee | User) & { isActive?: boolean }
 
 const isTeacher = (staff: StaffItem): staff is Employee => staff.role === "EMPLOYEE"
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
 const TEACHER_SUBJECT_OPTIONS = [
   "Matematika",
   "Teknologi Informasi",
@@ -175,7 +175,7 @@ export default function SuperAdminStaff() {
     }
 
     if (!WHATSAPP_REGEX.test(normalizedPhone)) {
-      toast.error("Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)")
+      toast.error("Format nomor WhatsApp Indonesia tidak valid")
       return
     }
 
@@ -240,7 +240,7 @@ export default function SuperAdminStaff() {
     }
 
     if (!WHATSAPP_REGEX.test(normalizedPhone)) {
-      toast.error("Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)")
+      toast.error("Format nomor WhatsApp Indonesia tidak valid")
       return
     }
 
@@ -446,6 +446,7 @@ export default function SuperAdminStaff() {
             {filteredStaff.map((staff) => {
               const teacher = isTeacher(staff)
               const stats = teacher ? teacherScheduleStats.get(staff.id) : null
+              const isStaffActive = "isActive" in staff ? staff.isActive !== false : true
 
               return (
                 <div
@@ -491,6 +492,10 @@ export default function SuperAdminStaff() {
 
                     <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs border shrink-0 ${teacher ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>
                       {teacher ? "Guru" : "Admin"}
+                    </span>
+
+                    <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs border shrink-0 ${isStaffActive ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
+                      {isStaffActive ? "Aktif" : "Nonaktif"}
                     </span>
 
                     <div className="relative group" onClick={(e) => e.stopPropagation()}>
