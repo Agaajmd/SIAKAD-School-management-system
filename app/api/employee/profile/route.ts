@@ -17,7 +17,6 @@ export async function GET(request: Request) {
         email: user.email,
         avatar: user.avatar,
         role: "EMPLOYEE" as const,
-        subject: teacher?.subject || "General",
         rating: teacher?.rating || 0,
         classesCount: teacher?.classesCount || 0,
         homeroomClassId: teacher?.homeroomClassId,
@@ -43,7 +42,6 @@ export async function PATCH(request: Request) {
 
   const teachers = getDbTeachers()
   const index = teachers.findIndex((item) => item.id === id)
-  let subject = body.subject ? String(body.subject) : "General"
   let rating = 0
   let classesCount = 0
   let homeroomClassId: string | undefined = undefined

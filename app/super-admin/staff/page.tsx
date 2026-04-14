@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { openShareChannel } from "@/lib/account-share"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassInput } from "@/components/atoms/glass-input"
@@ -29,12 +30,35 @@ import {
   X,
   AlertTriangle,
   Filter,
+  Mail,
+  MessageCircle,
 } from "lucide-react"
 
 type StaffFilterType = "all" | "teacher" | "admin"
 type StaffItem = Employee | User
 
-const isTeacher = (staff: StaffItem): staff is Employee => "subject" in staff
+const isTeacher = (staff: StaffItem): staff is Employee => staff.role === "EMPLOYEE"
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+const TEACHER_SUBJECT_OPTIONS = [
+  "Matematika",
+  "Teknologi Informasi",
+  "Bahasa Indonesia",
+  "Bahasa Inggris",
+  "Fisika",
+  "Kimia",
+  "Biologi",
+  "Sejarah",
+  "Ekonomi",
+  "PKN",
+  "Agama",
+  "Olahraga",
+  "Seni Budaya",
+]
+
+function normalizeWhatsappNumber(value: string) {
+  return value.trim().replace(/[\s-]/g, "")
+}
 
 export default function SuperAdminStaff() {
   const router = useRouter()
@@ -51,12 +75,14 @@ export default function SuperAdminStaff() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [staffToDelete, setStaffToDelete] = useState<StaffItem | null>(null)
+  const [knownPasswords, setKnownPasswords] = useState<Record<string, string>>({})
 
   const [newStaff, setNewStaff] = useState({
     type: "teacher" as "teacher" | "admin",
     name: "",
     email: "",
     password: "",
+    phone: "",
     subject: "",
   })
 
@@ -66,6 +92,7 @@ export default function SuperAdminStaff() {
     name: "",
     email: "",
     password: "",
+    phone: "",
     subject: "",
   })
 
@@ -104,7 +131,9 @@ export default function SuperAdminStaff() {
     if (!debouncedSearchQuery) return filteredByTypeStaff
     const query = debouncedSearchQuery.toLowerCase()
     return filteredByTypeStaff.filter((staff) =>
-      staff.name.toLowerCase().includes(query) || staff.email.toLowerCase().includes(query),
+      staff.name.toLowerCase().includes(query) ||
+      (staff.phone || "").toLowerCase().includes(query) ||
+      staff.email.toLowerCase().includes(query),
     )
   }, [filteredByTypeStaff, debouncedSearchQuery])
 
@@ -133,8 +162,20 @@ export default function SuperAdminStaff() {
   }, [teachers])
 
   const handleAddStaff = useCallback(async () => {
-    if (!newStaff.name || !newStaff.email || !newStaff.password) {
-      toast.error("Nama, email, dan password wajib diisi")
+    const normalizedPhone = normalizeWhatsappNumber(newStaff.phone)
+
+    if (!newStaff.name || !newStaff.email || !newStaff.password || !normalizedPhone) {
+      toast.error("Nama, email, password, dan nomor WhatsApp wajib diisi")
+      return
+    }
+
+    if (!EMAIL_REGEX.test(newStaff.email.trim().toLowerCase())) {
+      toast.error("Format email tidak valid")
+      return
+    }
+
+    if (!WHATSAPP_REGEX.test(normalizedPhone)) {
+      toast.error("Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)")
       return
     }
 
@@ -143,12 +184,25 @@ export default function SuperAdminStaff() {
       return
     }
 
+    if (newStaff.type === "teacher" && !newStaff.subject.trim()) {
+      toast.error("Mata pelajaran guru wajib diisi")
+      return
+    }
+
     setIsMutating(true)
     try {
+      const payload = {
+        ...newStaff,
+        name: newStaff.name.trim(),
+        email: newStaff.email.trim().toLowerCase(),
+        phone: normalizedPhone,
+        subject: newStaff.subject.trim(),
+      }
+
       const res = await fetch("/api/super-admin/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newStaff),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
 
@@ -159,9 +213,10 @@ export default function SuperAdminStaff() {
       } else {
         setAdmins((prev) => [...prev, data.staff])
       }
+      setKnownPasswords((prev) => ({ ...prev, [data.staff.id]: newStaff.password }))
 
       setShowAddModal(false)
-      setNewStaff({ type: "teacher", name: "", email: "", password: "", subject: "" })
+      setNewStaff({ type: "teacher", name: "", email: "", password: "", phone: "", subject: "" })
       toast.success("Staff berhasil ditambahkan")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal menambahkan staff"
@@ -172,8 +227,25 @@ export default function SuperAdminStaff() {
   }, [newStaff])
 
   const handleEditStaff = useCallback(async () => {
-    if (!editStaff.id || !editStaff.name || !editStaff.email) {
-      toast.error("Nama dan email wajib diisi")
+    const normalizedPhone = normalizeWhatsappNumber(editStaff.phone)
+
+    if (!editStaff.id || !editStaff.name || !editStaff.email || !normalizedPhone) {
+      toast.error("Nama, email, dan nomor WhatsApp wajib diisi")
+      return
+    }
+
+    if (!EMAIL_REGEX.test(editStaff.email.trim().toLowerCase())) {
+      toast.error("Format email tidak valid")
+      return
+    }
+
+    if (!WHATSAPP_REGEX.test(normalizedPhone)) {
+      toast.error("Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)")
+      return
+    }
+
+    if (editStaff.type === "teacher" && !editStaff.subject.trim()) {
+      toast.error("Mata pelajaran guru wajib diisi")
       return
     }
 
@@ -184,10 +256,18 @@ export default function SuperAdminStaff() {
 
     setIsMutating(true)
     try {
+      const payload = {
+        ...editStaff,
+        name: editStaff.name.trim(),
+        email: editStaff.email.trim().toLowerCase(),
+        phone: normalizedPhone,
+        subject: editStaff.subject.trim(),
+      }
+
       const res = await fetch(`/api/super-admin/staff/${editStaff.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editStaff),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal memperbarui staff")
@@ -206,8 +286,12 @@ export default function SuperAdminStaff() {
         setTeachers((prev) => prev.filter((item) => item.id !== data.staff.id))
       }
 
+      if (editStaff.password) {
+        setKnownPasswords((prev) => ({ ...prev, [data.staff.id]: editStaff.password }))
+      }
+
       setShowEditModal(false)
-      setEditStaff({ id: "", type: "teacher", name: "", email: "", password: "", subject: "" })
+      setEditStaff({ id: "", type: "teacher", name: "", email: "", password: "", phone: "", subject: "" })
       toast.success("Data staff berhasil diperbarui")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal memperbarui staff"
@@ -245,10 +329,30 @@ export default function SuperAdminStaff() {
       name: staff.name,
       email: staff.email,
       password: "",
+      phone: staff.phone || "",
       subject: isTeacher(staff) ? staff.subject : "",
     })
     setShowEditModal(true)
   }, [])
+
+  const sendAccount = useCallback((staff: StaffItem, channel: "whatsapp" | "email", password: string) => {
+    try {
+      openShareChannel(channel, {
+        roleLabel: isTeacher(staff) ? "Guru" : "Admin",
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone,
+        password,
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal membuka kanal pengiriman")
+    }
+  }, [])
+
+  const handleShareAccount = useCallback((staff: StaffItem, channel: "whatsapp" | "email") => {
+    const password = knownPasswords[staff.id] || ""
+    sendAccount(staff, channel, password)
+  }, [knownPasswords, sendAccount])
 
   if (isLoading) {
     return <RouteLoading />
@@ -355,7 +459,7 @@ export default function SuperAdminStaff() {
                     <img src={staff.avatar} alt={staff.name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-200 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-800 text-sm sm:text-base truncate">{staff.name}</p>
-                      <p className="text-xs sm:text-sm text-slate-500 truncate">{staff.email}</p>
+                      <p className="text-xs sm:text-sm text-slate-500 truncate">WA: {staff.phone || "-"}</p>
                       {teacher && (
                         <div className="flex items-center gap-2 sm:gap-3 mt-1">
                           <span className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
@@ -386,7 +490,7 @@ export default function SuperAdminStaff() {
                     )}
 
                     <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs border shrink-0 ${teacher ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>
-                      {teacher ? "Teacher" : "Admin"}
+                      {teacher ? "Guru" : "Admin"}
                     </span>
 
                     <div className="relative group" onClick={(e) => e.stopPropagation()}>
@@ -394,7 +498,7 @@ export default function SuperAdminStaff() {
                         <MoreVertical className="w-4 h-4 text-slate-600" />
                       </button>
 
-                      <div className="absolute right-0 top-full mt-2 w-36 sm:w-40 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                      <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                         {teacher && (
                           <button onClick={() => router.push(`/super-admin/staff/${staff.id}`)} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                             <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -404,6 +508,14 @@ export default function SuperAdminStaff() {
                         <button onClick={() => openEditModal(staff)} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                           <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           Edit
+                        </button>
+                        <button onClick={() => handleShareAccount(staff, "whatsapp")} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                          <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          Kirim Akun via WhatsApp
+                        </button>
+                        <button onClick={() => handleShareAccount(staff, "email")} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                          <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          Kirim Akun via Email
                         </button>
                         <button
                           onClick={() => {
@@ -450,12 +562,48 @@ export default function SuperAdminStaff() {
               </div>
             </div>
 
-            <GlassInput placeholder="Masukkan nama lengkap" value={newStaff.name} onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} />
-            <GlassInput type="email" placeholder="Masukkan email" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} />
-            <GlassInput type="password" placeholder="Minimal 6 karakter" value={newStaff.password} onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })} />
+            <GlassInput
+              label="Nama Lengkap"
+              placeholder="Masukkan nama lengkap"
+              autoComplete="name"
+              value={newStaff.name}
+              onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+            />
+            <GlassInput
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="Masukkan email"
+              value={newStaff.email}
+              onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+            />
+            <GlassInput
+              label="Nomor WhatsApp"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel-national"
+              placeholder="Contoh: 081234567890 atau +6281234567890"
+              value={newStaff.phone}
+              onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+            />
+            <GlassInput
+              label="Password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Minimal 6 karakter"
+              value={newStaff.password}
+              onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+            />
 
             {newStaff.type === "teacher" && (
-              <GlassInput placeholder="Contoh: Matematika, Fisika, dll" value={newStaff.subject} onChange={(e) => setNewStaff({ ...newStaff, subject: e.target.value })} />
+              <>
+                <GlassInput list="teacher-subject-options" placeholder="Pilih/ketik jenis guru (contoh: Matematika, Teknologi Informasi)" value={newStaff.subject} onChange={(e) => setNewStaff({ ...newStaff, subject: e.target.value })} />
+                <datalist id="teacher-subject-options">
+                  {TEACHER_SUBJECT_OPTIONS.map((subjectItem) => (
+                    <option key={subjectItem} value={subjectItem} />
+                  ))}
+                </datalist>
+              </>
             )}
 
             <div className="flex gap-3 pt-3 border-t border-slate-100">
@@ -473,12 +621,48 @@ export default function SuperAdminStaff() {
 
         <GlassModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Staff">
           <div className="space-y-5">
-            <GlassInput placeholder="Masukkan nama lengkap" value={editStaff.name} onChange={(e) => setEditStaff({ ...editStaff, name: e.target.value })} />
-            <GlassInput type="email" placeholder="Masukkan email" value={editStaff.email} onChange={(e) => setEditStaff({ ...editStaff, email: e.target.value })} />
-            <GlassInput type="password" placeholder="Kosongkan jika tidak diubah" value={editStaff.password} onChange={(e) => setEditStaff({ ...editStaff, password: e.target.value })} />
+            <GlassInput
+              label="Nama Lengkap"
+              placeholder="Masukkan nama lengkap"
+              autoComplete="name"
+              value={editStaff.name}
+              onChange={(e) => setEditStaff({ ...editStaff, name: e.target.value })}
+            />
+            <GlassInput
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="Masukkan email"
+              value={editStaff.email}
+              onChange={(e) => setEditStaff({ ...editStaff, email: e.target.value })}
+            />
+            <GlassInput
+              label="Nomor WhatsApp"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel-national"
+              placeholder="Contoh: 081234567890 atau +6281234567890"
+              value={editStaff.phone}
+              onChange={(e) => setEditStaff({ ...editStaff, phone: e.target.value })}
+            />
+            <GlassInput
+              label="Password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Kosongkan jika tidak diubah"
+              value={editStaff.password}
+              onChange={(e) => setEditStaff({ ...editStaff, password: e.target.value })}
+            />
 
             {editStaff.type === "teacher" && (
-              <GlassInput placeholder="Contoh: Matematika, Fisika, dll" value={editStaff.subject} onChange={(e) => setEditStaff({ ...editStaff, subject: e.target.value })} />
+              <>
+                <GlassInput list="teacher-subject-options" placeholder="Pilih/ketik jenis guru (contoh: Matematika, Teknologi Informasi)" value={editStaff.subject} onChange={(e) => setEditStaff({ ...editStaff, subject: e.target.value })} />
+                <datalist id="teacher-subject-options">
+                  {TEACHER_SUBJECT_OPTIONS.map((subjectItem) => (
+                    <option key={subjectItem} value={subjectItem} />
+                  ))}
+                </datalist>
+              </>
             )}
 
             <div className="flex gap-3 pt-3 border-t border-slate-100">
@@ -516,6 +700,7 @@ export default function SuperAdminStaff() {
             </div>
           </div>
         </GlassModal>
+
       </div>
     </DashboardLayout>
   )

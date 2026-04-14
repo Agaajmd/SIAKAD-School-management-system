@@ -58,27 +58,6 @@ const FEATURES = [
   }
 ] as const
 
-const TESTIMONIALS = [
-  {
-    name: 'Dr. Siti Rahayu',
-    role: 'Kepala Sekolah SMAN 1',
-    content: 'Aegix SLE sangat membantu kami dalam mengelola administrasi sekolah. Interface yang mudah dan fitur yang lengkap!',
-    rating: 5
-  },
-  {
-    name: 'Budi Santoso, S.Pd',
-    role: 'Guru Matematika',
-    content: 'Sistem pembelajaran online-nya sangat memudahkan saya memberikan tugas dan menilai siswa. Sangat recommended!',
-    rating: 5
-  },
-  {
-    name: 'Andi Wijaya',
-    role: 'Siswa Kelas XII',
-    content: 'Dengan sistem gamifikasi, belajar jadi lebih menyenangkan. Saya bisa pantau nilai dan tugas dengan mudah!',
-    rating: 5
-  }
-] as const
-
 const CURRENT_YEAR = new Date().getFullYear()
 
 // ==================== REUSABLE COMPONENTS ====================
@@ -163,63 +142,6 @@ const FeatureCard = memo(function FeatureCard({
   )
 })
 
-const TestimonialCard = memo(function TestimonialCard({
-  name,
-  role,
-  content,
-  rating,
-  index = 0
-}: {
-  name: string
-  role: string
-  content: string
-  rating: number
-  index?: number
-}) {
-  return (
-    <div 
-      className={cn(
-        "bg-white/80 backdrop-blur-sm border border-slate-200/80",
-        "rounded-2xl p-6 sm:p-8",
-        "hover:border-blue-300 hover:bg-white",
-        "transition-all duration-300 ease-out",
-        "hover:shadow-xl hover:shadow-blue-100/70",
-        "hover:-translate-y-1"
-      )}
-      style={{ animationDelay: `${index * 50}ms` }}
-    >
-      <div className="flex gap-1 mb-4">
-        {Array.from({ length: rating }).map((_, i) => (
-          <Star key={i} className="w-4 h-4 sm:w-5 sm:h-5 fill-yellow-400 text-yellow-400" />
-        ))}
-      </div>
-
-      <p className="text-sm sm:text-base text-muted-foreground mb-6 leading-relaxed">
-        &quot;{content}&quot;
-      </p>
-
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          "w-10 h-10 sm:w-12 sm:h-12 rounded-full",
-          "bg-gradient-to-br from-blue-500 to-blue-700",
-          "flex items-center justify-center",
-          "text-white font-bold text-sm sm:text-base"
-        )}>
-          {name.charAt(0)}
-        </div>
-        <div>
-          <p className="text-sm sm:text-base text-foreground font-semibold">
-            {name}
-          </p>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            {role}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-})
-
 // ==================== SECTION COMPONENTS ====================
 
 const Navigation = memo(function Navigation({ 
@@ -242,12 +164,6 @@ const Navigation = memo(function Navigation({
               className="text-muted-foreground hover:text-foreground transition-colors font-medium"
             >
               Fitur
-            </a>
-            <a 
-              href="#testimonials" 
-              className="text-muted-foreground hover:text-foreground transition-colors font-medium"
-            >
-              Testimoni
             </a>
             <div className="flex items-center gap-3">
               <Link href="/login" prefetch={false}>
@@ -303,17 +219,6 @@ const MobileMenu = memo(function MobileMenu({
           )}
         >
           Fitur
-        </a>
-        <a 
-          href="#testimonials" 
-          onClick={handleClose}
-          className={cn(
-            "block py-3 px-4 rounded-xl",
-            "text-foreground hover:bg-slate-100",
-            "transition-all text-center font-medium"
-          )}
-        >
-          Testimoni
         </a>
         <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">
           <Link href="/login" prefetch={false} onClick={handleClose}>
@@ -419,33 +324,6 @@ const FeaturesSection = memo(function FeaturesSection() {
   )
 })
 
-const TestimonialsSection = memo(function TestimonialsSection() {
-  return (
-    <section id="testimonials" className="perf-scroll-section py-16 sm:py-20 lg:py-32 relative bg-blue-50/40">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 sm:mb-6">
-            Apa Kata Mereka
-          </h2>
-          <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto">
-            Dipercaya oleh ribuan pengguna dari berbagai sekolah di Indonesia
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-7xl mx-auto">
-          {TESTIMONIALS.map((testimonial, index) => (
-            <TestimonialCard
-              key={testimonial.name}
-              {...testimonial}
-              index={index}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-})
-
 const CTASection = memo(function CTASection() {
   return (
     <section className="perf-scroll-section py-16 sm:py-20 lg:py-32 relative overflow-hidden">
@@ -508,7 +386,6 @@ export default function HomePage() {
       <main>
         <HeroSection />
         <FeaturesSection />
-        <TestimonialsSection />
         <CTASection />
       </main>
       

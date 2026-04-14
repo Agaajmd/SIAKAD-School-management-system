@@ -9,7 +9,15 @@ export async function GET(request: Request) {
 
   const students = getDbStudents().filter((student) => (classId ? student.classId === classId : true))
   const studentIds = new Set(students.map((student) => student.id))
-  const parents = getDbParents().filter((parent) => parent.childrenIds.some((childId) => studentIds.has(childId)))
+  const parents = getDbParents()
+    .filter((parent) => parent.childrenIds.some((childId) => studentIds.has(childId)))
+    .map((parent) => {
+      const firstChild = students.find((student) => student.id === parent.childrenIds[0])
+      return {
+        ...parent,
+        childName: firstChild?.name || "-",
+      }
+    })
 
   return NextResponse.json({ parents, students })
 }
@@ -18,16 +26,18 @@ export async function POST(request: Request) {
   const body = await request.json()
   const name = String(body.name || "").trim()
   const email = String(body.email || "").trim().toLowerCase()
+  const phone = String(body.phone || "").trim()
   const password = String(body.password || "")
   const childId = String(body.childId || "").trim()
 
-  if (!name || !email || !password || !childId) {
+  if (!name || !email || !phone || !password || !childId) {
     return NextResponse.json({ error: "Data orang tua belum lengkap" }, { status: 400 })
   }
 
   const user = await createDbUser({
     name,
     email,
+    phone,
     password,
     role: "PARENT",
     avatar: "/placeholder-user.jpg",
@@ -40,7 +50,7 @@ export async function POST(request: Request) {
     avatar: user.avatar,
     role: "PARENT" as const,
     childrenIds: [childId],
-    phone: "",
+    phone,
   }
 
   setDbParents([...getDbParents(), next])
@@ -73,6 +83,7 @@ export async function PATCH(request: Request) {
     id,
     name: body.name ? String(body.name) : undefined,
     email: body.email ? String(body.email) : undefined,
+    phone: body.phone ? String(body.phone) : undefined,
     password: body.password ? String(body.password) : undefined,
   })
 
@@ -80,6 +91,7 @@ export async function PATCH(request: Request) {
     ...target,
     name: body.name ? String(body.name) : target.name,
     email: body.email ? String(body.email) : target.email,
+    phone: body.phone ? String(body.phone) : target.phone,
     childrenIds: body.childId ? [String(body.childId)] : target.childrenIds,
   }
 
@@ -98,7 +110,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const url = new URL(request.url)
-  const id = String(url.searchParams.get("id") || "").trim()
+  let id = String(url.searchParams.get("id") || "").trim()
+  if (!id) {
+    const body = (await request.json().catch(() => ({}))) as { id?: string }
+    id = String(body.id || "").trim()
+  }
   if (!id) {
     return NextResponse.json({ error: "id wajib diisi" }, { status: 400 })
   }

@@ -20,7 +20,6 @@ export function PublicNavbar({
   links = [
     { href: "#features", label: "Fitur" },
     { href: "#stats", label: "Statistik" },
-    { href: "#testimonials", label: "Testimoni" },
   ],
   showAuthButtons = true 
 }: PublicNavbarProps) {

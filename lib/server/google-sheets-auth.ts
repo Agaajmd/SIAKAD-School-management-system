@@ -18,10 +18,8 @@ const USERS_COLUMNS = [
   "is_active",
   "created_at",
   "updated_at",
+  "subject",
 ]
-
-const DEFAULT_PRINCIPAL_EMAIL = "n.jagadmd@gmail.com"
-const DEFAULT_PRINCIPAL_PASSWORD = "AAAAowueyfcdtwvbeuqg270827"
 
 type ServiceAccount = {
   client_email: string
@@ -37,6 +35,7 @@ export interface DbUser {
   role: UserRole
   classId?: string
   phone?: string
+  subject?: string
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -46,6 +45,8 @@ export interface PublicUser {
   id: string
   name: string
   email: string
+  phone?: string
+  subject?: string
   avatar: string
   role: UserRole
 }
@@ -105,6 +106,7 @@ function normalizeUserRow(row: string[]): DbUser {
     isActive: String(row[8] || "true").toLowerCase() !== "false",
     createdAt: row[9] || new Date().toISOString(),
     updatedAt: row[10] || new Date().toISOString(),
+    subject: row[11] || undefined,
   }
 }
 
@@ -113,6 +115,8 @@ function toPublicUser(user: DbUser): PublicUser {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone,
+    subject: user.subject,
     avatar: user.avatar,
     role: user.role,
   }
@@ -145,7 +149,7 @@ export async function ensureUsersSheetReady() {
 
   const headerRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A1:K1`,
+    range: `${USERS_SHEET_NAME}!A1:L1`,
   })
 
   const firstRow = headerRes.data.values?.[0] || []
@@ -155,7 +159,7 @@ export async function ensureUsersSheetReady() {
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A1:K1`,
+    range: `${USERS_SHEET_NAME}!A1:L1`,
     valueInputOption: "RAW",
     requestBody: {
       values: [USERS_COLUMNS],
@@ -170,7 +174,7 @@ export async function getAllDbUsers(): Promise<DbUser[]> {
 
   const rowsRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A2:K`,
+    range: `${USERS_SHEET_NAME}!A2:L`,
   })
 
   const rows = rowsRes.data.values || []
@@ -193,6 +197,7 @@ export async function createDbUser(input: {
   avatar?: string
   classId?: string
   phone?: string
+  subject?: string
 }): Promise<PublicUser> {
   const existing = await findDbUserByEmail(input.email)
   if (existing) {
@@ -210,6 +215,7 @@ export async function createDbUser(input: {
     role: input.role,
     classId: input.classId,
     phone: input.phone,
+    subject: input.subject,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -219,7 +225,7 @@ export async function createDbUser(input: {
   const spreadsheetId = getSpreadsheetId()
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A:K`,
+    range: `${USERS_SHEET_NAME}!A:L`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[
@@ -234,6 +240,7 @@ export async function createDbUser(input: {
         String(newUser.isActive),
         newUser.createdAt,
         newUser.updatedAt,
+        newUser.subject || "",
       ]],
     },
   })
@@ -262,7 +269,7 @@ async function getDbUserRowById(id: string): Promise<{ user: DbUser; rowNumber: 
 
   const rowsRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A2:K`,
+    range: `${USERS_SHEET_NAME}!A2:L`,
   })
 
   const rows = rowsRes.data.values || []
@@ -288,6 +295,7 @@ export async function updateDbUserById(input: {
   avatar?: string
   classId?: string
   phone?: string
+  subject?: string
 }): Promise<PublicUser> {
   const target = await getDbUserRowById(input.id)
   if (!target) {
@@ -323,6 +331,7 @@ export async function updateDbUserById(input: {
     avatar: nextAvatar,
     classId: input.classId ?? current.classId,
     phone: input.phone ?? current.phone,
+    subject: input.subject ?? current.subject,
     passwordHash: nextPasswordHash,
     updatedAt: now,
   }
@@ -331,7 +340,7 @@ export async function updateDbUserById(input: {
   const spreadsheetId = getSpreadsheetId()
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A${target.rowNumber}:K${target.rowNumber}`,
+    range: `${USERS_SHEET_NAME}!A${target.rowNumber}:L${target.rowNumber}`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[
@@ -346,6 +355,7 @@ export async function updateDbUserById(input: {
         String(next.isActive),
         next.createdAt,
         next.updatedAt,
+        next.subject || "",
       ]],
     },
   })
@@ -369,7 +379,7 @@ export async function deactivateDbUserById(id: string): Promise<void> {
   const spreadsheetId = getSpreadsheetId()
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A${target.rowNumber}:K${target.rowNumber}`,
+    range: `${USERS_SHEET_NAME}!A${target.rowNumber}:L${target.rowNumber}`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[
@@ -384,21 +394,69 @@ export async function deactivateDbUserById(id: string): Promise<void> {
         String(next.isActive),
         next.createdAt,
         next.updatedAt,
+        next.subject || "",
       ]],
     },
   })
 }
 
+export async function deleteDbUserById(id: string): Promise<void> {
+  const target = await getDbUserRowById(id)
+  if (!target) {
+    return
+  }
+
+  const sheets = await getSheetsClient()
+  const spreadsheetId = getSpreadsheetId()
+  const sheetRes = await sheets.spreadsheets.get({ spreadsheetId })
+  const usersSheet = sheetRes.data.sheets?.find((sheet) => sheet.properties?.title === USERS_SHEET_NAME)
+  const sheetId = usersSheet?.properties?.sheetId
+
+  if (typeof sheetId !== "number") {
+    throw new Error("Sheet users tidak ditemukan")
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: target.rowNumber - 1,
+              endIndex: target.rowNumber,
+            },
+          },
+        },
+      ],
+    },
+  })
+}
+
 export async function ensurePrincipalSeeded() {
-  const existing = await findDbUserByEmail(DEFAULT_PRINCIPAL_EMAIL)
+  const seedEmail = String(process.env.SEED_PRINCIPAL_EMAIL || "").trim().toLowerCase()
+  const seedPassword = String(process.env.SEED_PRINCIPAL_PASSWORD || "")
+  const seedName = String(process.env.SEED_PRINCIPAL_NAME || "Principal").trim() || "Principal"
+
+  if (!seedEmail && !seedPassword) {
+    return
+  }
+
+  if (!seedEmail || !seedPassword) {
+    throw new Error("SEED_PRINCIPAL_EMAIL dan SEED_PRINCIPAL_PASSWORD harus diisi bersamaan")
+  }
+
+  const existing = await findDbUserByEmail(seedEmail)
   if (existing) {
     return
   }
 
   await createDbUser({
-    name: "N. Jagad",
-    email: DEFAULT_PRINCIPAL_EMAIL,
-    password: DEFAULT_PRINCIPAL_PASSWORD,
+    name: seedName,
+    email: seedEmail,
+    password: seedPassword,
     role: "SUPER_ADMIN",
     avatar: "/placeholder-user.jpg",
   })

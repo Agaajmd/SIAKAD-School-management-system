@@ -37,11 +37,6 @@ export function PublicFooter() {
                   Statistik
                 </a>
               </li>
-              <li>
-                <a href="#testimonials" className="text-white/50 hover:text-white text-sm transition-colors">
-                  Testimoni
-                </a>
-              </li>
             </ul>
           </div>
 

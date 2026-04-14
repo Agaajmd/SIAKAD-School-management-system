@@ -17,6 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     id,
     name: body.name ? String(body.name) : undefined,
     email: body.email ? String(body.email) : undefined,
+    phone: body.phone ? String(body.phone) : undefined,
     password: body.password ? String(body.password) : undefined,
   })
 
@@ -24,6 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ...target,
     name: body.name ? String(body.name) : target.name,
     email: body.email ? String(body.email) : target.email,
+    phone: body.phone ? String(body.phone) : target.phone,
     classId: body.classId ? String(body.classId) : target.classId,
   }
 
