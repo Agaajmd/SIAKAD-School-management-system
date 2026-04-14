@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { deactivateDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { deleteDbUserById, getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
 import {
   getDbAdmins,
   getDbClasses,
@@ -12,24 +12,55 @@ import {
 } from "@/lib/server/data-store"
 import { logAudit } from "@/lib/server/audit-log"
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+
+function normalizeWhatsappNumber(raw: string) {
+  return raw.trim().replace(/[\s-]/g, "")
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const users = await getAllDbUsers()
+  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
   const teacher = getDbTeachers().find((item) => item.id === id)
   const admin = getDbAdmins().find((item) => item.id === id)
 
-  if (!teacher && !admin) {
+  if (!teacher && !admin && !targetUser) {
     return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 })
   }
 
-  if (admin) {
+  if ((admin && !targetUser) || targetUser?.role === "ADMIN") {
+    const resolvedAdmin = admin || {
+      id: id,
+      name: targetUser?.name || "",
+      email: targetUser?.email || "",
+      phone: targetUser?.phone,
+      avatar: targetUser?.avatar || "/placeholder-user.jpg",
+      role: "ADMIN" as const,
+    }
+
     return NextResponse.json({
-      staff: admin,
+      staff: resolvedAdmin,
       type: "admin",
       schedules: [],
       tasks: [],
       taskSubmissions: [],
       classes: [],
     })
+  }
+
+  const resolvedTeacher = teacher || {
+    id: id,
+    name: targetUser?.name || "",
+    email: targetUser?.email || "",
+    phone: targetUser?.phone,
+    avatar: targetUser?.avatar || "/placeholder-user.jpg",
+    role: "EMPLOYEE" as const,
+    subject: targetUser?.subject || "",
+    rating: 0,
+    classesCount: 0,
+    homeroomClassId: undefined,
   }
 
   const schedules = getDbSchedules().filter((schedule) => schedule.teacherId === id)
@@ -39,7 +70,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const classes = getDbClasses().filter((classRoom) => schedules.some((schedule) => schedule.classId === classRoom.id))
 
   return NextResponse.json({
-    staff: teacher,
+    staff: resolvedTeacher,
     type: "teacher",
     schedules,
     tasks,
@@ -50,29 +81,60 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const users = await getAllDbUsers()
+  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
   const body = (await request.json()) as {
     type?: "teacher" | "admin"
     name?: string
     email?: string
     password?: string
+    phone?: string
     subject?: string
   }
 
   const teacher = getDbTeachers().find((item) => item.id === id)
   const admin = getDbAdmins().find((item) => item.id === id)
 
-  if (!teacher && !admin) {
+  if (!teacher && !admin && !targetUser) {
     return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 })
   }
 
-  const isTeacher = Boolean(teacher)
+  const name = String(body.name || "").trim()
+  const email = String(body.email || "").trim().toLowerCase()
+  const phone = normalizeWhatsappNumber(String(body.phone || ""))
+  const subject = String(body.subject || "").trim()
+  const password = body.password ? String(body.password) : undefined
+
+  if (!name || !email || !phone) {
+    return NextResponse.json({ error: "Nama, email, dan nomor WhatsApp wajib diisi" }, { status: 400 })
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+  }
+
+  if (!WHATSAPP_REGEX.test(phone)) {
+    return NextResponse.json({ error: "Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)" }, { status: 400 })
+  }
+
+  if (password && password.length < 6) {
+    return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
+  }
+
+  const isTeacher = Boolean(teacher || targetUser?.role === "EMPLOYEE")
   const nextType = body.type || (isTeacher ? "teacher" : "admin")
+
+  if (nextType === "teacher" && !subject && !teacher?.subject) {
+    return NextResponse.json({ error: "Mata pelajaran guru wajib diisi" }, { status: 400 })
+  }
 
   const updatedUser = await updateDbUserById({
     id,
-    name: body.name,
-    email: body.email,
-    password: body.password,
+    name,
+    email,
+    phone,
+    password,
+    subject: nextType === "teacher" ? (subject || undefined) : undefined,
     role: nextType === "teacher" ? "EMPLOYEE" : "ADMIN",
   })
 
@@ -81,13 +143,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(teacher || {
         id,
         role: "EMPLOYEE" as const,
-        rating: 4.5,
+        subject,
+        rating: 0,
         classesCount: 0,
       }),
       name: updatedUser.name,
       email: updatedUser.email,
+      phone: updatedUser.phone,
       avatar: updatedUser.avatar,
-      subject: body.subject || teacher?.subject || "General",
+      subject: subject || teacher?.subject || "",
     }
 
     const remainingAdmins = getDbAdmins().filter((item) => item.id !== id)
@@ -116,6 +180,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     id,
     name: updatedUser.name,
     email: updatedUser.email,
+    phone: updatedUser.phone,
     avatar: updatedUser.avatar,
     role: "ADMIN" as const,
   }
@@ -144,10 +209,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const users = await getAllDbUsers()
+  const targetUser = users.find((item) => item.id === id && item.isActive && (item.role === "EMPLOYEE" || item.role === "ADMIN"))
 
   const teacher = getDbTeachers().find((item) => item.id === id)
   const admin = getDbAdmins().find((item) => item.id === id)
-  const target = teacher || admin
+  const target = teacher || admin || targetUser
 
   if (!target) {
     return NextResponse.json({ error: "Staff tidak ditemukan" }, { status: 404 })
@@ -155,7 +222,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
   setDbTeachers(getDbTeachers().filter((item) => item.id !== id))
   setDbAdmins(getDbAdmins().filter((item) => item.id !== id))
-  await deactivateDbUserById(id)
+  await deleteDbUserById(id)
 
   logAudit({
     actorId: id,

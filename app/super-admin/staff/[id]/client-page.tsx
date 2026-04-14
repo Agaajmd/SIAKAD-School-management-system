@@ -15,10 +15,6 @@ import {
   Briefcase,
   BookOpen,
   ClipboardList,
-  CheckCircle,
-  TrendingUp,
-  Star,
-  Clock,
 } from "lucide-react"
 
 interface ClientPageProps {
@@ -67,27 +63,6 @@ export default function StaffDetailClient({ id }: ClientPageProps) {
 
   const teacher = useMemo(() => (type === "teacher" && staff ? (staff as Employee) : null), [type, staff])
 
-  const gradedSubmissions = useMemo(() => taskSubmissions.filter((submission) => submission.status === "GRADED"), [taskSubmissions])
-
-  const performanceData = useMemo(() => {
-    const ratingScore = teacher ? Math.round(Math.min(Math.max(teacher.rating, 0), 5) * 20) : null
-    const taskCompletion = taskSubmissions.length > 0 ? Math.round((gradedSubmissions.length / taskSubmissions.length) * 100) : null
-    const attendanceRate = null
-    const studentSatisfaction = ratingScore
-    const values = [ratingScore, taskCompletion, attendanceRate, studentSatisfaction].filter(
-      (value): value is number => typeof value === "number",
-    )
-    return {
-      teachingScore: ratingScore,
-      attendanceRate,
-      taskCompletion,
-      studentSatisfaction,
-      overallScore: values.length > 0 ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null,
-    }
-  }, [gradedSubmissions.length, taskSubmissions.length, teacher])
-
-  const formatPercent = (value: number | null) => (typeof value === "number" ? `${value}%` : "-")
-
   if (isLoading) {
     return <RouteLoading />
   }
@@ -126,13 +101,7 @@ export default function StaffDetailClient({ id }: ClientPageProps) {
             <img src={staff.avatar || "/placeholder-user.jpg"} alt={staff.name} className="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200" />
             <div className="text-center sm:text-left flex-1">
               <h1 className="text-2xl font-bold text-slate-800">{staff.name}</h1>
-              <p className="text-purple-600">{teacher ? `Guru ${teacher.subject}` : "Administrator"}</p>
-            </div>
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">{performanceData.overallScore ?? "-"}</span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Skor Kinerja</p>
+              <p className="text-purple-600">{teacher ? "Guru" : "Administrator"}</p>
             </div>
           </div>
         </GlassCard>
@@ -153,12 +122,12 @@ export default function StaffDetailClient({ id }: ClientPageProps) {
             </div>
             <div>
               <p className="text-xs text-slate-500">Role</p>
-              <p className="text-slate-800">{teacher ? `Guru ${teacher.subject}` : "Admin"}</p>
+              <p className="text-slate-800">{teacher ? "Guru" : "Admin"}</p>
             </div>
           </GlassCard>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <GlassCard className="text-center py-4">
             <BookOpen className="w-5 h-5 mx-auto mb-2 text-blue-500" />
             <p className="text-xl font-bold text-slate-800">{schedules.length}</p>
@@ -169,42 +138,7 @@ export default function StaffDetailClient({ id }: ClientPageProps) {
             <p className="text-xl font-bold text-slate-800">{tasks.length}</p>
             <p className="text-xs text-slate-500">Tugas Dibuat</p>
           </GlassCard>
-          <GlassCard className="text-center py-4">
-            <Star className="w-5 h-5 mx-auto mb-2 text-yellow-500" />
-            <p className="text-xl font-bold text-slate-800">{teacher ? teacher.rating.toFixed(1) : "-"}</p>
-            <p className="text-xs text-slate-500">Rating</p>
-          </GlassCard>
         </div>
-
-        <GlassCard>
-          <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-purple-500" />
-            Metrik Kinerja
-          </h2>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 bg-slate-50 rounded-xl text-center">
-              <BookOpen className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-              <p className="text-2xl font-bold text-slate-800">{formatPercent(performanceData.teachingScore)}</p>
-              <p className="text-xs text-slate-500">Kualitas Mengajar</p>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-xl text-center">
-              <Clock className="w-6 h-6 mx-auto mb-2 text-green-500" />
-              <p className="text-2xl font-bold text-slate-800">{formatPercent(performanceData.attendanceRate)}</p>
-              <p className="text-xs text-slate-500">Kehadiran</p>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-xl text-center">
-              <ClipboardList className="w-6 h-6 mx-auto mb-2 text-purple-500" />
-              <p className="text-2xl font-bold text-slate-800">{formatPercent(performanceData.taskCompletion)}</p>
-              <p className="text-xs text-slate-500">Penyelesaian Tugas</p>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-xl text-center">
-              <CheckCircle className="w-6 h-6 mx-auto mb-2 text-yellow-500" />
-              <p className="text-2xl font-bold text-slate-800">{formatPercent(performanceData.studentSatisfaction)}</p>
-              <p className="text-xs text-slate-500">Kepuasan Siswa</p>
-            </div>
-          </div>
-        </GlassCard>
 
         <GlassCard>
           <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">

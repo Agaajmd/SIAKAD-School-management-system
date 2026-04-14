@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
-import { Loader2, Plus, Trash2, UserRoundPlus, Users } from "lucide-react"
+import { Loader2, Mail, MessageCircle, MoreVertical, Plus, Trash2, UserRoundPlus, Users } from "lucide-react"
 import { toast } from "sonner"
+import { openShareChannel } from "@/lib/account-share"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
@@ -16,6 +17,7 @@ type ParentAccount = {
   id: string
   name: string
   email: string
+  phone?: string
   childName: string
 }
 
@@ -69,6 +71,7 @@ type GridStudent = {
 type ParentForm = {
   name: string
   email: string
+  phone: string
   password: string
   childId: string
 }
@@ -76,6 +79,7 @@ type ParentForm = {
 const EMPTY_FORM: ParentForm = {
   name: "",
   email: "",
+  phone: "",
   password: "",
   childId: "",
 }
@@ -99,6 +103,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [knownParentPasswords, setKnownParentPasswords] = useState<Record<string, string>>({})
 
   const load = async () => {
     try {
@@ -192,6 +197,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
     setForm({
       name: parent.name,
       email: parent.email,
+      phone: parent.phone || "",
       password: "",
       childId: student?.id || "",
     })
@@ -199,8 +205,8 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
   }
 
   const handleSubmit = async () => {
-    if (!form.name || !form.email || !form.childId || (!editingParent && !form.password)) {
-      toast.error("Nama, email, anak, dan password wajib diisi")
+    if (!form.name || !form.email || !form.phone || !form.childId || (!editingParent && !form.password)) {
+      toast.error("Nama, email, nomor WhatsApp, anak, dan password wajib diisi")
       return
     }
 
@@ -214,6 +220,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
             id: editingParent.id,
             name: form.name,
             email: form.email,
+            phone: form.phone,
             password: form.password || undefined,
             childId: form.childId,
             classId,
@@ -222,6 +229,9 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal update akun parent")
         setParents((prev) => prev.map((item) => (item.id === editingParent.id ? data.parent : item)))
+        if (form.password) {
+          setKnownParentPasswords((prev) => ({ ...prev, [editingParent.id]: form.password }))
+        }
         toast.success("Akun parent berhasil diperbarui")
       } else {
         const res = await fetch("/api/employee/parents", {
@@ -232,6 +242,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal menambah akun parent")
         setParents((prev) => [...prev, data.parent])
+        setKnownParentPasswords((prev) => ({ ...prev, [data.parent.id]: form.password }))
         toast.success("Akun parent berhasil dibuat")
       }
 
@@ -267,6 +278,25 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
     }
   }
 
+  const sendParentAccount = (parent: ParentAccount, channel: "whatsapp" | "email", password: string) => {
+    try {
+      openShareChannel(channel, {
+        roleLabel: "Orang Tua",
+        name: parent.name,
+        email: parent.email,
+        phone: parent.phone,
+        password,
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal membuka kanal pengiriman")
+    }
+  }
+
+  const handleShareParentAccount = (parent: ParentAccount, channel: "whatsapp" | "email") => {
+    const password = knownParentPasswords[parent.id] || ""
+    sendParentAccount(parent, channel, password)
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 px-1">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -299,11 +329,28 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
               <div>
                 <p className="font-semibold text-slate-800">{parent.name}</p>
                 <p className="text-sm text-slate-500">{parent.email}</p>
+                <p className="text-sm text-slate-500">WA: {parent.phone || "-"}</p>
                 <p className="text-sm text-slate-600">Anak: {parent.childName}</p>
               </div>
-              <div className="flex gap-2">
-                <GlassButton size="sm" variant="secondary" onClick={() => openEdit(parent)}>Edit</GlassButton>
-                <GlassButton size="sm" variant="danger" onClick={() => { setSelectedParent(parent); setShowDeleteModal(true) }}><Trash2 className="w-4 h-4" /></GlassButton>
+              <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                <button className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <MoreVertical className="w-4 h-4 text-slate-600" />
+                </button>
+                <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                  <button onClick={() => openEdit(parent)} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit</button>
+                  <button onClick={() => handleShareParentAccount(parent, "whatsapp")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <MessageCircle className="w-4 h-4" />
+                    Kirim Akun via WhatsApp
+                  </button>
+                  <button onClick={() => handleShareParentAccount(parent, "email")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <Mail className="w-4 h-4" />
+                    Kirim Akun via Email
+                  </button>
+                  <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-slate-50 transition-colors" onClick={() => { setSelectedParent(parent); setShowDeleteModal(true) }}>
+                    <Trash2 className="w-4 h-4" />
+                    Hapus
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -314,6 +361,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
           <div className="space-y-4">
             <GlassInput placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <GlassInput type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <GlassInput type="tel" placeholder="Nomor WhatsApp" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             <GlassInput type="password" placeholder={editingParent ? "Password baru (opsional)" : "Password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <select value={form.childId} onChange={(e) => setForm({ ...form, childId: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-700">
               <option value="">Pilih Anak</option>
@@ -335,6 +383,7 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
             </GlassButton>
           </div>
         </GlassModal>
+
     </div>
   )
 }

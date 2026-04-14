@@ -14,6 +14,13 @@ import { getSessionUser } from "@/lib/server/session-user"
 
 type StaffType = "teacher" | "admin"
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const WHATSAPP_REGEX = /^\+?[0-9]{10,15}$/
+
+function normalizeWhatsappNumber(raw: string) {
+  return raw.trim().replace(/[\s-]/g, "")
+}
+
 export async function GET() {
   await ensurePrincipalSeeded()
   const users = await getAllDbUsers()
@@ -22,19 +29,89 @@ export async function GET() {
     (sessionUser?.role === "SUPER_ADMIN"
       ? users.find((user) => user.id === sessionUser.id && user.role === "SUPER_ADMIN" && user.isActive) || null
       : null) || getDbSuperAdmins()[0] || null
-  const teachers = getDbTeachers()
-  const admins = getDbAdmins()
+  const teacherMap = new Map(getDbTeachers().map((teacher) => [teacher.id, teacher]))
+  const adminMap = new Map(getDbAdmins().map((admin) => [admin.id, admin]))
+
+  const teachersFromUsers = users
+    .filter((user) => user.role === "EMPLOYEE" && user.isActive)
+    .map((user) => {
+      const detail = teacherMap.get(user.id)
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: "EMPLOYEE" as const,
+        subject: detail?.subject || user.subject || "",
+        rating: detail?.rating ?? 0,
+        classesCount: detail?.classesCount ?? 0,
+        homeroomClassId: detail?.homeroomClassId,
+      }
+    })
+
+  const adminsFromUsers = users
+    .filter((user) => user.role === "ADMIN" && user.isActive)
+    .map((user) => {
+      const detail = adminMap.get(user.id)
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: detail?.avatar || user.avatar,
+        role: "ADMIN" as const,
+      }
+    })
+
+  const teachersById = new Map(teachersFromUsers.map((teacher) => [teacher.id, teacher]))
+  for (const teacher of getDbTeachers()) {
+    if (!teachersById.has(teacher.id)) {
+      teachersById.set(teacher.id, {
+        id: teacher.id,
+        name: teacher.name,
+        email: teacher.email,
+        phone: teacher.phone,
+        avatar: teacher.avatar,
+        role: "EMPLOYEE" as const,
+        subject: teacher.subject || "",
+        rating: teacher.rating,
+        classesCount: teacher.classesCount,
+        homeroomClassId: teacher.homeroomClassId,
+      })
+    }
+  }
+
+  const adminsById = new Map(adminsFromUsers.map((admin) => [admin.id, admin]))
+  for (const admin of getDbAdmins()) {
+    if (!adminsById.has(admin.id)) {
+      adminsById.set(admin.id, {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        phone: admin.phone,
+        avatar: admin.avatar,
+        role: "ADMIN" as const,
+      })
+    }
+  }
+
+  const teachers = Array.from(teachersById.values())
+  const admins = Array.from(adminsById.values())
+
   const schedules = getDbSchedules()
 
   return NextResponse.json({ superAdmin, teachers, admins, schedules })
 }
 
 export async function POST(request: Request) {
+  const users = await getAllDbUsers()
   const body = (await request.json()) as {
     type?: StaffType
     name?: string
     email?: string
     password?: string
+    phone?: string
     subject?: string
   }
 
@@ -42,10 +119,27 @@ export async function POST(request: Request) {
   const name = String(body.name || "").trim()
   const email = String(body.email || "").trim().toLowerCase()
   const password = String(body.password || "")
+  const phone = normalizeWhatsappNumber(String(body.phone || ""))
   const subject = String(body.subject || "").trim()
 
-  if (!name || !email || !password) {
-    return NextResponse.json({ error: "Nama, email, dan password wajib diisi" }, { status: 400 })
+  if (!name || !email || !password || !phone) {
+    return NextResponse.json({ error: "Nama, email, password, dan nomor WhatsApp wajib diisi" }, { status: 400 })
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+  }
+
+  if (!WHATSAPP_REGEX.test(phone)) {
+    return NextResponse.json({ error: "Format nomor WhatsApp tidak valid (10-15 digit, boleh diawali +)" }, { status: 400 })
+  }
+
+  if (type === "teacher" && !subject) {
+    return NextResponse.json({ error: "Mata pelajaran guru wajib diisi" }, { status: 400 })
+  }
+
+  if (users.some((user) => normalizeWhatsappNumber(user.phone || "") === phone)) {
+    return NextResponse.json({ error: "Nomor WhatsApp sudah terdaftar" }, { status: 409 })
   }
 
   if (password.length < 6) {
@@ -56,6 +150,8 @@ export async function POST(request: Request) {
     name,
     email,
     password,
+    phone,
+    subject: type === "teacher" ? subject : undefined,
     role: type === "teacher" ? "EMPLOYEE" : "ADMIN",
     avatar: "/placeholder-user.jpg",
   })
@@ -66,10 +162,11 @@ export async function POST(request: Request) {
       id: createdUser.id,
       name: createdUser.name,
       email: createdUser.email,
+      phone: createdUser.phone,
       avatar: createdUser.avatar,
       role: "EMPLOYEE",
-      subject: subject || "General",
-      rating: 4.5,
+      subject,
+      rating: 0,
       classesCount: 0,
     }
     setDbTeachers([...teachers, newTeacher])
@@ -90,6 +187,7 @@ export async function POST(request: Request) {
     id: createdUser.id,
     name: createdUser.name,
     email: createdUser.email,
+    phone: createdUser.phone,
     avatar: createdUser.avatar,
     role: "ADMIN",
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { openShareChannel } from "@/lib/account-share"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
@@ -9,7 +10,7 @@ import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
-import { Edit2, GraduationCap, Loader2, Plus, School, Search, Trash2, Users } from "lucide-react"
+import { Edit2, GraduationCap, Loader2, Mail, MessageCircle, MoreVertical, Plus, School, Search, Trash2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ClassRoom = {
@@ -25,6 +26,7 @@ type Student = {
   id: string
   name: string
   email: string
+  phone?: string
   classId: string
 }
 
@@ -40,6 +42,7 @@ type StudentFormState = {
   id: string
   name: string
   email: string
+  phone: string
   password: string
 }
 
@@ -55,6 +58,7 @@ const EMPTY_STUDENT_FORM: StudentFormState = {
   id: "",
   name: "",
   email: "",
+  phone: "",
   password: "",
 }
 
@@ -77,6 +81,7 @@ export default function AdminClassManagement() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [studentForm, setStudentForm] = useState<StudentFormState>(EMPTY_STUDENT_FORM)
+  const [knownStudentPasswords, setKnownStudentPasswords] = useState<Record<string, string>>({})
 
   const [isMutatingClass, setIsMutatingClass] = useState(false)
   const [isMutatingStudent, setIsMutatingStudent] = useState(false)
@@ -109,7 +114,7 @@ export default function AdminClassManagement() {
     return students.filter(
       (student) =>
         student.classId === activeClassId &&
-        (student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query)),
+        (student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query) || (student.phone || "").toLowerCase().includes(query)),
     )
   }, [students, activeClassId, searchStudent])
 
@@ -215,13 +220,13 @@ export default function AdminClassManagement() {
 
   const openEditStudentModal = (student: Student) => {
     setEditingStudent(student)
-    setStudentForm({ id: student.id, name: student.name, email: student.email, password: "" })
+    setStudentForm({ id: student.id, name: student.name, email: student.email, phone: student.phone || "", password: "" })
     setShowStudentModal(true)
   }
 
   const handleSaveStudent = async () => {
-    if (!studentForm.name || !studentForm.email || (!editingStudent && !studentForm.password)) {
-      toast.error("Nama, email, dan password wajib diisi")
+    if (!studentForm.name || !studentForm.email || !studentForm.phone || (!editingStudent && !studentForm.password)) {
+      toast.error("Nama, email, nomor WhatsApp, dan password wajib diisi")
       return
     }
 
@@ -234,6 +239,7 @@ export default function AdminClassManagement() {
           body: JSON.stringify({
             name: studentForm.name,
             email: studentForm.email,
+            phone: studentForm.phone,
             password: studentForm.password || undefined,
             classId: activeClassId,
           }),
@@ -241,6 +247,9 @@ export default function AdminClassManagement() {
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal update siswa")
         setStudents((prev) => prev.map((item) => (item.id === editingStudent.id ? data.student : item)))
+        if (studentForm.password) {
+          setKnownStudentPasswords((prev) => ({ ...prev, [editingStudent.id]: studentForm.password }))
+        }
         toast.success("Siswa berhasil diperbarui")
       } else {
         const res = await fetch("/api/admin/students", {
@@ -249,6 +258,7 @@ export default function AdminClassManagement() {
           body: JSON.stringify({
             name: studentForm.name,
             email: studentForm.email,
+            phone: studentForm.phone,
             password: studentForm.password,
             classId: activeClassId,
           }),
@@ -256,6 +266,7 @@ export default function AdminClassManagement() {
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Gagal menambah siswa")
         setStudents((prev) => [...prev, data.student])
+        setKnownStudentPasswords((prev) => ({ ...prev, [data.student.id]: studentForm.password }))
         toast.success("Siswa berhasil ditambahkan")
       }
 
@@ -285,6 +296,25 @@ export default function AdminClassManagement() {
     } finally {
       setIsMutatingStudent(false)
     }
+  }
+
+  const sendStudentAccount = (student: Student, channel: "whatsapp" | "email", password: string) => {
+    try {
+      openShareChannel(channel, {
+        roleLabel: "Siswa",
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        password,
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal membuka kanal pengiriman")
+    }
+  }
+
+  const handleShareStudentAccount = (student: Student, channel: "whatsapp" | "email") => {
+    const password = knownStudentPasswords[student.id] || ""
+    sendStudentAccount(student, channel, password)
   }
 
   const totalSeats = classes.reduce((acc, cls) => acc + cls.rows * cls.cols, 0)
@@ -352,10 +382,29 @@ export default function AdminClassManagement() {
           <div className="space-y-2">
             {studentsInActiveClass.map((student) => (
               <div key={student.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0"><p className="font-medium text-slate-800 truncate">{student.name}</p><p className="text-sm text-slate-500 truncate">{student.email}</p></div>
-                <div className="flex gap-2">
-                  <GlassButton size="sm" variant="secondary" onClick={() => openEditStudentModal(student)}><Edit2 className="w-4 h-4" /></GlassButton>
-                  <GlassButton size="sm" variant="danger" onClick={() => { setSelectedStudent(student); setShowDeleteStudentModal(true) }}><Trash2 className="w-4 h-4" /></GlassButton>
+                <div className="min-w-0"><p className="font-medium text-slate-800 truncate">{student.name}</p><p className="text-sm text-slate-500 truncate">{student.email}</p><p className="text-sm text-slate-500 truncate">WA: {student.phone || "-"}</p></div>
+                <div className="relative group" onClick={(event) => event.stopPropagation()}>
+                  <button className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                    <MoreVertical className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                    <button onClick={() => openEditStudentModal(student)} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button onClick={() => handleShareStudentAccount(student, "whatsapp")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                      <MessageCircle className="w-4 h-4" />
+                      Kirim Akun via WhatsApp
+                    </button>
+                    <button onClick={() => handleShareStudentAccount(student, "email")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                      <Mail className="w-4 h-4" />
+                      Kirim Akun via Email
+                    </button>
+                    <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-slate-50 transition-colors" onClick={() => { setSelectedStudent(student); setShowDeleteStudentModal(true) }}>
+                      <Trash2 className="w-4 h-4" />
+                      Hapus
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -400,6 +449,7 @@ export default function AdminClassManagement() {
           <div className="space-y-4">
             <GlassInput placeholder="Nama siswa" value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })} />
             <GlassInput type="email" placeholder="Email siswa" value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} />
+            <GlassInput type="tel" placeholder="Nomor WhatsApp siswa" value={studentForm.phone} onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })} />
             <GlassInput type="password" placeholder={editingStudent ? "Password baru (opsional)" : "Password"} value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })} />
             <GlassButton className="w-full" onClick={handleSaveStudent} disabled={isMutatingStudent}>
               {isMutatingStudent ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} Simpan Siswa
@@ -415,6 +465,7 @@ export default function AdminClassManagement() {
             </GlassButton>
           </div>
         </GlassModal>
+
       </div>
     </DashboardLayout>
   )

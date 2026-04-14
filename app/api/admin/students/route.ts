@@ -8,9 +8,10 @@ export async function POST(request: Request) {
   const name = String(body.name || "").trim()
   const email = String(body.email || "").trim().toLowerCase()
   const password = String(body.password || "")
+  const phone = String(body.phone || "").trim()
   const classId = String(body.classId || "").trim()
 
-  if (!name || !email || !password || !classId) {
+  if (!name || !email || !password || !phone || !classId) {
     return NextResponse.json({ error: "Data siswa belum lengkap" }, { status: 400 })
   }
 
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     name,
     email,
     password,
+    phone,
     role: "STUDENT",
     classId,
     avatar: "/placeholder-user.jpg",
@@ -31,6 +33,7 @@ export async function POST(request: Request) {
     id: authUser.id,
     name: authUser.name,
     email: authUser.email,
+    phone: authUser.phone,
     avatar: authUser.avatar,
     role: "STUDENT" as const,
     classId,

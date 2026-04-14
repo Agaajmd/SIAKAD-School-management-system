@@ -64,7 +64,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
         email: employeeUser.email,
         avatar: employeeUser.avatar,
         role: "EMPLOYEE" as const,
-        subject: teacherMap?.subject || "General",
         rating: teacherMap?.rating || 0,
         classesCount: teacherMap?.classesCount || 0,
       }

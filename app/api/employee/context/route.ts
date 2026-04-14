@@ -24,7 +24,6 @@ export async function GET() {
         email: sessionUser.email,
         avatar: sessionUser.avatar,
         role: "EMPLOYEE" as const,
-        subject: mappedTeacher?.subject || "General",
         rating: mappedTeacher?.rating || 0,
         classesCount: mappedTeacher?.classesCount || 0,
         homeroomClassId: mappedTeacher?.homeroomClassId,
