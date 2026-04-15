@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const users = await getAllDbUsers()
+  const [users, classes] = await Promise.all([getAllDbUsers(), getAllDbClasses().catch(() => [])])
+  const { resolveClassId } = createClassIdResolver(classes)
   const students = users.filter((user) => user.role === "STUDENT" && user.isActive)
   const studentId = url.searchParams.get("studentId") || students[0]?.id
 
@@ -12,6 +15,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Siswa tidak ditemukan" }, { status: 404 })
   }
 
+  const normalizedClassId = resolveClassId(student.classId)
+  const classInfo = classes.find((item) => item.id === normalizedClassId)
+
   return NextResponse.json({
     student: {
       id: student.id,
@@ -19,7 +25,9 @@ export async function GET(request: Request) {
       email: student.email,
       avatar: student.avatar,
       role: student.role,
-      classId: student.classId,
+      classId: normalizedClassId || student.classId,
+      className: classInfo?.name || student.classId || "-",
+      classGrade: classInfo?.grade || "",
       phone: student.phone || "",
     },
   })

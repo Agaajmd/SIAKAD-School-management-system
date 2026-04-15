@@ -20,6 +20,7 @@ import type {
   AttendanceRecord,
   StudentGrade,
   StudentPayment,
+  WalletTopup,
 } from "@/lib/data-model"
 
 export interface StudentReport {
@@ -29,9 +30,13 @@ export interface StudentReport {
   assetName: string
   damageType: string
   description: string
+  imageUrl?: string
   status: "pending" | "in_progress" | "resolved"
   createdAt: string
   location: string
+  assignedTo?: string
+  resolvedAt?: string
+  resolution?: string
 }
 
 export interface AuditLog {
@@ -66,6 +71,7 @@ type PersistedDb = {
   parents: Parent[]
   canteens: Canteen[]
   canteenOwners: CanteenOwner[]
+  walletTopups: WalletTopup[]
 }
 
 const STORE_DIR = path.join(process.cwd(), ".data")
@@ -94,6 +100,7 @@ const createEmptyDb = (): PersistedDb => ({
   parents: [],
   canteens: [],
   canteenOwners: [],
+  walletTopups: [],
 })
 
 function ensureStoreDir() {
@@ -131,6 +138,7 @@ function mergeWithDefaults(raw: Partial<PersistedDb> | null | undefined): Persis
     parents: Array.isArray(raw.parents) ? raw.parents : empty.parents,
     canteens: Array.isArray(raw.canteens) ? raw.canteens : empty.canteens,
     canteenOwners: Array.isArray(raw.canteenOwners) ? raw.canteenOwners : empty.canteenOwners,
+    walletTopups: Array.isArray(raw.walletTopups) ? raw.walletTopups : empty.walletTopups,
   }
 }
 
@@ -270,4 +278,9 @@ export const setDbCanteenOwners = (canteenOwners: CanteenOwner[]) => {
 export const getDbStudentReports = () => readCollection("studentReports")
 export const setDbStudentReports = (studentReports: StudentReport[]) => {
   writeCollection("studentReports", studentReports)
+}
+
+export const getDbWalletTopups = () => readCollection("walletTopups")
+export const setDbWalletTopups = (walletTopups: WalletTopup[]) => {
+  writeCollection("walletTopups", walletTopups)
 }

@@ -18,6 +18,8 @@ import {
   Paperclip,
   Link2,
   Image as ImageIcon,
+  Plus,
+  Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -41,13 +43,45 @@ const isLikelyImageUrl = (value?: string) => {
   )
 }
 
+const toUrlList = (primary?: string, list?: string[]) => {
+  const values = [primary, ...(Array.isArray(list) ? list : [])]
+  const normalized = values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+  return [...new Set(normalized)]
+}
+
+const normalizeTaskMediaFields = (task: Task): Task => {
+  const attachmentUrls = toUrlList(task.attachmentUrl, task.attachmentUrls)
+  const imageUrls = toUrlList(task.imageUrl, task.imageUrls)
+  return {
+    ...task,
+    attachmentUrl: attachmentUrls[0],
+    attachmentUrls,
+    imageUrl: imageUrls[0],
+    imageUrls,
+  }
+}
+
+const normalizeSubmissionMediaFields = (submission: TaskSubmission): TaskSubmission => {
+  const attachmentUrls = toUrlList(submission.attachmentUrl, submission.attachmentUrls)
+  const imageUrls = toUrlList(submission.imageUrl, submission.imageUrls)
+  return {
+    ...submission,
+    attachmentUrl: attachmentUrls[0],
+    attachmentUrls,
+    imageUrl: imageUrls[0],
+    imageUrls,
+  }
+}
+
 export default function StudentAssignmentsPage() {
   const [student, setStudent] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<TabType>("pending")
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [submissionLink, setSubmissionLink] = useState("")
-  const [submissionImageUrl, setSubmissionImageUrl] = useState("")
+  const [submissionLinks, setSubmissionLinks] = useState<string[]>([""])
+  const [submissionImageUrls, setSubmissionImageUrls] = useState<string[]>([""])
   const [submissionFile, setSubmissionFile] = useState<File | null>(null)
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
@@ -63,8 +97,16 @@ export default function StudentAssignmentsPage() {
         }
         const data = await res.json()
         setStudent(data.student || null)
-        setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
-        setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+        setAllTasks(
+          Array.isArray(data.tasks)
+            ? data.tasks.map((task: Task) => normalizeTaskMediaFields(task))
+            : [],
+        )
+        setAllSubmissions(
+          Array.isArray(data.submissions)
+            ? data.submissions.map((submission: TaskSubmission) => normalizeSubmissionMediaFields(submission))
+            : [],
+        )
       } catch {
         setLoadError("Data tugas belum bisa dimuat.")
       } finally {
@@ -129,8 +171,8 @@ export default function StudentAssignmentsPage() {
   }
 
   const resetSubmissionForm = () => {
-    setSubmissionLink("")
-    setSubmissionImageUrl("")
+    setSubmissionLinks([""])
+    setSubmissionImageUrls([""])
     setSubmissionFile(null)
   }
 
@@ -142,7 +184,10 @@ export default function StudentAssignmentsPage() {
 
   const handleSubmit = async () => {
     if (!selectedTask || !student?.id) return
-    if (!submissionLink.trim() && !submissionImageUrl.trim() && !submissionFile) {
+    const attachmentUrlsFromInput = toUrlList(undefined, submissionLinks)
+    const imageUrlsFromInput = toUrlList(undefined, submissionImageUrls)
+
+    if (attachmentUrlsFromInput.length === 0 && imageUrlsFromInput.length === 0 && !submissionFile) {
       toast.error("Isi minimal satu: file, link, atau URL gambar")
       return
     }
@@ -151,8 +196,8 @@ export default function StudentAssignmentsPage() {
       (submission) => submission.taskId === selectedTask.id && submission.studentId === student.id,
     )
 
-    let attachmentUrl = submissionLink.trim() || undefined
-    let imageUrl = submissionImageUrl.trim() || undefined
+    let attachmentUrls = [...attachmentUrlsFromInput]
+    let imageUrls = [...imageUrlsFromInput]
     let attachmentName: string | undefined = undefined
 
     if (submissionFile) {
@@ -162,10 +207,11 @@ export default function StudentAssignmentsPage() {
       }
       try {
         const encoded = await fileToDataUrl(submissionFile)
-        attachmentUrl = encoded
         attachmentName = submissionFile.name
         if (submissionFile.type.startsWith("image/")) {
-          imageUrl = encoded
+          imageUrls = [...new Set([...imageUrls, encoded])]
+        } else {
+          attachmentUrls = [...new Set([...attachmentUrls, encoded])]
         }
       } catch {
         toast.error("Gagal memproses file")
@@ -179,8 +225,10 @@ export default function StudentAssignmentsPage() {
       body: JSON.stringify({
         studentId: student.id,
         taskId: selectedTask.id,
-        attachmentUrl,
-        imageUrl,
+        attachmentUrl: attachmentUrls[0],
+        attachmentUrls,
+        imageUrl: imageUrls[0],
+        imageUrls,
         attachmentName,
       }),
     })
@@ -191,7 +239,7 @@ export default function StudentAssignmentsPage() {
     }
 
     const data = await res.json()
-    const nextSubmission = data.submission as TaskSubmission
+    const nextSubmission = normalizeSubmissionMediaFields(data.submission as TaskSubmission)
     const nextSubmissions = existing
       ? allSubmissions.map((submission) => (submission.id === existing.id ? nextSubmission : submission))
       : [nextSubmission, ...allSubmissions]
@@ -351,33 +399,43 @@ export default function StudentAssignmentsPage() {
                 <p className="text-slate-600 text-sm leading-relaxed">{selectedTask.description}</p>
               </div>
 
-              {(selectedTask.attachmentUrl || selectedTask.imageUrl) && (
+              {(toUrlList(selectedTask.attachmentUrl, selectedTask.attachmentUrls).length > 0 ||
+                toUrlList(selectedTask.imageUrl, selectedTask.imageUrls).length > 0) && (
                 <div className="bg-blue-50 rounded-lg p-3 space-y-2">
                   <p className="text-sm font-medium text-blue-700">Lampiran dari Guru</p>
                   {(() => {
-                    const teacherImageUrl = selectedTask.imageUrl || (isLikelyImageUrl(selectedTask.attachmentUrl) ? selectedTask.attachmentUrl : undefined)
-                    if (!teacherImageUrl) return null
+                    const teacherAttachmentUrls = toUrlList(selectedTask.attachmentUrl, selectedTask.attachmentUrls)
+                    const teacherImageUrls = toUrlList(selectedTask.imageUrl, selectedTask.imageUrls)
+                    const previewImageUrls =
+                      teacherImageUrls.length > 0
+                        ? teacherImageUrls
+                        : teacherAttachmentUrls.filter((url) => isLikelyImageUrl(url))
+                    if (previewImageUrls.length === 0) return null
                     return (
-                      <div className="rounded-xl border border-blue-200 bg-white p-2">
-                        <img
-                          src={teacherImageUrl}
-                          alt={`Lampiran gambar ${selectedTask.title}`}
-                          className="w-full h-auto max-h-[420px] object-contain rounded-lg"
-                        />
+                      <div className="space-y-2">
+                        {previewImageUrls.map((url, index) => (
+                          <div key={`${selectedTask.id}-preview-${index}`} className="rounded-xl border border-blue-200 bg-white p-2">
+                            <img
+                              src={url}
+                              alt={`Lampiran gambar ${selectedTask.title} ${index + 1}`}
+                              className="w-full h-auto max-h-[420px] object-contain rounded-lg"
+                            />
+                          </div>
+                        ))}
                       </div>
                     )
                   })()}
                   <div className="flex flex-wrap gap-2">
-                    {selectedTask.attachmentUrl && (
-                      <a href={selectedTask.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
-                        <Link2 className="w-3.5 h-3.5" /> {selectedTask.attachmentName || "Buka File/Link Materi"}
+                    {toUrlList(selectedTask.attachmentUrl, selectedTask.attachmentUrls).map((url, index) => (
+                      <a key={`${selectedTask.id}-attachment-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
+                        <Link2 className="w-3.5 h-3.5" /> {selectedTask.attachmentName && index === 0 ? selectedTask.attachmentName : `Buka Link Materi ${index + 1}`}
                       </a>
-                    )}
-                    {selectedTask.imageUrl && (
-                      <a href={selectedTask.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
-                        <ImageIcon className="w-3.5 h-3.5" /> Buka Gambar Materi
+                    ))}
+                    {toUrlList(selectedTask.imageUrl, selectedTask.imageUrls).map((url, index) => (
+                      <a key={`${selectedTask.id}-image-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
+                        <ImageIcon className="w-3.5 h-3.5" /> Buka Gambar Materi {index + 1}
                       </a>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}
@@ -396,6 +454,8 @@ export default function StudentAssignmentsPage() {
                   )
                 }
                 if (submission?.status === "SUBMITTED") {
+                  const submissionAttachmentUrls = toUrlList(submission.attachmentUrl, submission.attachmentUrls)
+                  const submissionImageUrls = toUrlList(submission.imageUrl, submission.imageUrls)
                   return (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
                       <div className="flex items-center gap-2 text-blue-700">
@@ -404,16 +464,16 @@ export default function StudentAssignmentsPage() {
                       </div>
                       <p className="text-sm text-blue-600">Dikumpulkan pada {formatDate(submission.submittedAt)}</p>
                       <div className="flex flex-wrap gap-2">
-                        {submission.attachmentUrl && (
-                          <a href={submission.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
-                            <Link2 className="w-3.5 h-3.5" /> {submission.attachmentName || "File/Link Jawaban"}
+                        {submissionAttachmentUrls.map((url, index) => (
+                          <a key={`${submission.id}-attachment-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
+                            <Link2 className="w-3.5 h-3.5" /> {submission.attachmentName && index === 0 ? submission.attachmentName : `Link Jawaban ${index + 1}`}
                           </a>
-                        )}
-                        {submission.imageUrl && (
-                          <a href={submission.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
-                            <ImageIcon className="w-3.5 h-3.5" /> Gambar Jawaban
+                        ))}
+                        {submissionImageUrls.map((url, index) => (
+                          <a key={`${submission.id}-image-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">
+                            <ImageIcon className="w-3.5 h-3.5" /> Gambar Jawaban {index + 1}
                           </a>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )
@@ -451,20 +511,90 @@ export default function StudentAssignmentsPage() {
                 {submissionFile && <button onClick={previewSelectedFile} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">Preview file</button>}
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 mb-1.5 block">Link Jawaban (Opsional)</label>
-                <input type="url" placeholder="https://..." value={submissionLink} onChange={(e) => setSubmissionLink(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                {submissionLinks.map((url, index) => (
+                  <div key={`submission-link-${index}`} className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={url}
+                      onChange={(e) =>
+                        setSubmissionLinks((prev) => prev.map((item, idx) => (idx === index ? e.target.value : item)))
+                      }
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                    {index === submissionLinks.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setSubmissionLinks((prev) => [...prev, ""])}
+                        className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                        aria-label="Tambah link jawaban"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSubmissionLinks((prev) =>
+                            prev.length <= 1 ? [""] : prev.filter((_, idx) => idx !== index),
+                          )
+                        }
+                        className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-red-200 text-red-500 hover:bg-red-50"
+                        aria-label="Hapus link jawaban"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 mb-1.5 block">URL Gambar Jawaban (Opsional)</label>
-                <input type="url" placeholder="https://.../jawaban.jpg" value={submissionImageUrl} onChange={(e) => setSubmissionImageUrl(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                {submissionImageUrls.map((url, index) => (
+                  <div key={`submission-image-${index}`} className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://.../jawaban.jpg"
+                      value={url}
+                      onChange={(e) =>
+                        setSubmissionImageUrls((prev) => prev.map((item, idx) => (idx === index ? e.target.value : item)))
+                      }
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                    {index === submissionImageUrls.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setSubmissionImageUrls((prev) => [...prev, ""])}
+                        className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                        aria-label="Tambah URL gambar jawaban"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSubmissionImageUrls((prev) =>
+                            prev.length <= 1 ? [""] : prev.filter((_, idx) => idx !== index),
+                          )
+                        }
+                        className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-red-200 text-red-500 hover:bg-red-50"
+                        aria-label="Hapus URL gambar jawaban"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
             <div className="flex gap-3 mt-4">
               <GlassButton variant="secondary" onClick={() => setShowUploadModal(false)} className="flex-1 justify-center">Batal</GlassButton>
-              <GlassButton onClick={handleSubmit} className="flex-1 justify-center" disabled={!submissionLink.trim() && !submissionImageUrl.trim() && !submissionFile}>
+              <GlassButton onClick={handleSubmit} className="flex-1 justify-center" disabled={toUrlList(undefined, submissionLinks).length === 0 && toUrlList(undefined, submissionImageUrls).length === 0 && !submissionFile}>
                 <Paperclip className="w-4 h-4 mr-1.5" /> Kirim
               </GlassButton>
             </div>

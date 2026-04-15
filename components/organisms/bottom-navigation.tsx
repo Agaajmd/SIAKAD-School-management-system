@@ -92,7 +92,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/parent", icon: Home, label: "Home", exact: true },
           { href: "/parent/class", icon: LayoutGrid, label: "Kelas" },
           { href: "/parent/finance", icon: Wallet, label: "Keuangan" },
-          { href: "/parent/grades", icon: BookOpen, label: "Nilai" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
       case "CANTEEN_OWNER":
         return [
@@ -114,13 +114,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/student", icon: Home, label: "Dashboard" },
           { href: "/student/class", icon: LayoutGrid, label: "Kelas" },
           { href: "/student/assignments", icon: FileText, label: "Tugas" },
-          {
-            href: "/student/report",
-            icon: AlertTriangle,
-            label: "Laporan Aset",
-            disabled: true,
-            disabledReason: "Fitur laporan aset sedang dinonaktifkan sementara.",
-          },
+          { href: "/student/report", icon: AlertTriangle, label: "Laporan Aset" },
           { href: "/student/schedule", icon: Calendar, label: "Jadwal" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
@@ -139,6 +133,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/admin", icon: Home, label: "Dashboard" },
           { href: "/admin/class", icon: LayoutGrid, label: "Manajemen Kelas" },
           { href: "/admin/scan", icon: QrCode, label: "Scan & Laporan" },
+          { href: "/admin/wallet-topups", icon: Wallet, label: "Konfirmasi Topup" },
           { href: "/admin/users", icon: Users, label: "Data Pengguna" },
           { href: "/admin/canteen", icon: Store, label: "Kelola Kantin" },
           { href: "/admin/schedule", icon: Calendar, label: "Jadwal" },
@@ -160,6 +155,7 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/parent/points", icon: Award, label: "Poin Aktivitas" },
           { href: "/parent/grades", icon: BookOpen, label: "Nilai" },
           { href: "/parent/schedule", icon: Calendar, label: "Jadwal Anak" },
+          { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
       case "CANTEEN_OWNER":
         return [

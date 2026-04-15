@@ -25,18 +25,14 @@ const getNetPoints = (student: Student) => {
   return positivePoints - negativePoints
 }
 
-// Combine total points with attendance bonus for class leaderboard ranking.
-const getAttendanceScore = (student: Student) => {
-  const attendanceBonus = student.attendance === "PRESENT" ? 20 : student.attendance === "SICK" ? 5 : 0
-  return getNetPoints(student) + attendanceBonus
-}
+const getLeaderboardScore = (student: Student) => getNetPoints(student)
 
 export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students = [] }: AttendanceLeaderboardProps) => {
   // Sort students by attendance score
   const sortedStudents = [...students]
     .map(student => ({
       ...student,
-      attendanceScore: toFiniteNumber(getAttendanceScore(student)),
+      attendanceScore: toFiniteNumber(getLeaderboardScore(student)),
     }))
     .sort((a, b) => b.attendanceScore - a.attendanceScore)
     .slice(0, limit)

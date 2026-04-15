@@ -3,6 +3,7 @@ import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbCanteens } from "@/lib/server/google-sheets-canteens"
+import { getAllDbAssetReports } from "@/lib/server/google-sheets-asset-reports"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -180,13 +181,34 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
         (sessionUser?.role === "ADMIN" ? users.find((user) => user.id === sessionUser.id && user.isActive) : null) ||
         users.find((user) => user.role === "ADMIN" && user.isActive) ||
         null
-      const reports = getDbStudentReports().map((report) => ({
+      const reportsSource = await (async () => {
+        try {
+          return (await getAllDbAssetReports()).map((report) => ({
+            id: report.id,
+            studentId: report.studentId,
+            assetName: report.assetName,
+            damageType: report.damageType,
+            status: report.status,
+            createdAt: report.createdAt,
+          }))
+        } catch {
+          return getDbStudentReports().map((report) => ({
+            id: report.id,
+            studentId: report.studentId,
+            assetName: report.assetName,
+            damageType: report.damageType,
+            status: report.status,
+            createdAt: report.createdAt,
+          }))
+        }
+      })()
+      const reports = reportsSource.map((report) => ({
         id: report.id,
         type: report.damageType,
         title: report.assetName,
         status: report.status.replace("_", "-"),
         date: report.createdAt,
-        reporter: report.studentId,
+        reporter: users.find((item) => item.id === report.studentId)?.name || report.studentId,
         priority: report.status === "pending" ? "high" : report.status === "in_progress" ? "medium" : "low",
       }))
       const inventory = getDbCanteens().map((canteen) => {

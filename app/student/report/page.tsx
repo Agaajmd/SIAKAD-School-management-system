@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
@@ -19,7 +19,15 @@ import {
   AlertCircle,
   FileText,
   Package,
+  X,
 } from "lucide-react"
+import { toast } from "sonner"
+
+type ClassOption = {
+  id: string
+  name: string
+  grade?: string
+}
 
 export default function StudentReportPage() {
   const [student, setStudent] = useState<any>(null)
@@ -28,11 +36,13 @@ export default function StudentReportPage() {
   const [damageType, setDamageType] = useState("")
   const [description, setDescription] = useState("")
   const [location, setLocation] = useState("")
+  const [classes, setClasses] = useState<ClassOption[]>([])
+  const [imageDataUrl, setImageDataUrl] = useState("")
+  const [imageName, setImageName] = useState("")
+  const [isReadingImage, setIsReadingImage] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showSuccess, setShowSuccess] = useState(false)
   const [reports, setReports] = useState<any[]>([])
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
-  const successTimerRef = useRef<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
 
@@ -48,6 +58,25 @@ export default function StudentReportPage() {
           throw new Error("Data siswa tidak ditemukan")
         }
         setStudent(overview.student)
+        if (overview.student.classId) {
+          setLocation(String(overview.student.classId))
+        }
+
+        const classesRes = await fetch("/api/admin/classes", { cache: "no-store" })
+        if (classesRes.ok) {
+          const classPayload = await classesRes.json()
+          const classList = Array.isArray(classPayload.classes) ? (classPayload.classes as ClassOption[]) : []
+          setClasses(classList)
+
+          const studentClassId = String(overview.student.classId || "")
+          const studentClass = classList.find((item) => item.id === studentClassId)
+          const studentLocation = studentClass
+            ? `${studentClass.name}${studentClass.grade ? ` - Grade ${studentClass.grade}` : ""}`
+            : String(studentClassId || "")
+          if (studentLocation) {
+            setLocation(studentLocation)
+          }
+        }
 
         const reportsRes = await fetch(`/api/student/reports?studentId=${overview.student.id}`, {
           cache: "no-store",
@@ -68,63 +97,85 @@ export default function StudentReportPage() {
     void load()
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (successTimerRef.current !== null) {
-        window.clearTimeout(successTimerRef.current)
-      }
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("File harus berupa gambar")
+      event.target.value = ""
+      return
     }
-  }, [])
+
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error("Ukuran gambar maksimal 5MB")
+      event.target.value = ""
+      return
+    }
+
+    setIsReadingImage(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageDataUrl(String(reader.result || ""))
+      setImageName(file.name)
+      setIsReadingImage(false)
+    }
+    reader.onerror = () => {
+      setIsReadingImage(false)
+      toast.error("Gagal membaca file gambar")
+      event.target.value = ""
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!assetId || !damageType || !description || !location) {
-      alert("Mohon isi semua field!")
+      toast.error("Mohon isi semua field")
       return
     }
 
     if (!student?.id) {
-      alert("Data siswa belum siap")
+      toast.error("Data siswa belum siap")
       return
     }
 
     setIsSubmitting(true)
-    const res = await fetch("/api/student/reports", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        studentId: student.id,
-        assetId,
-        assetName: assetId,
-        damageType,
-        description,
-        location,
-      }),
-    })
+    try {
+      const res = await fetch("/api/student/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: student.id,
+          assetId,
+          assetName: assetId,
+          damageType,
+          description,
+          location,
+          imageUrl: imageDataUrl || undefined,
+        }),
+      })
 
-    if (!res.ok) {
+      if (!res.ok) {
+        toast.error("Gagal mengirim laporan")
+        return
+      }
+
+      const data = await res.json()
+      setReports((prev) => [data.report, ...prev])
+      setAssetId("")
+      setDamageType("")
+      setDescription("")
+      setImageDataUrl("")
+      setImageName("")
+      toast.success("Laporan berhasil dikirim")
+    } catch {
+      toast.error("Gagal mengirim laporan")
+    } finally {
       setIsSubmitting(false)
-      alert("Gagal mengirim laporan")
-      return
     }
-
-    const data = await res.json()
-    setReports((prev) => [data.report, ...prev])
-    setShowSuccess(true)
-    setAssetId("")
-    setDamageType("")
-    setDescription("")
-    setLocation("")
-    setIsSubmitting(false)
-
-    if (successTimerRef.current !== null) {
-      window.clearTimeout(successTimerRef.current)
-    }
-    successTimerRef.current = window.setTimeout(() => {
-      setShowSuccess(false)
-      successTimerRef.current = null
-    }, 3000)
   }
 
   const getStatusBadge = (status: string) => {
@@ -231,43 +282,63 @@ export default function StudentReportPage() {
           </button>
         </div>
 
-        {/* Success Toast */}
-        {showSuccess && (
-          <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-500 text-white rounded-lg shadow-lg animate-in slide-in-from-top-2">
-            <CheckCircle className="w-5 h-5" />
-            <span>Laporan berhasil dikirim!</span>
-          </div>
-        )}
-
         {/* Form Tab */}
         {activeTab === "form" && (
           <GlassCard className="space-y-6">
             {/* Image Upload */}
-            <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+            <div className="space-y-3">
               <input
                 type="file"
                 accept="image/*"
                 id="asset-image"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    // Handle file upload
-                    console.log('File selected:', file.name)
-                  }
-                }}
+                onChange={handleImageChange}
               />
-              <label htmlFor="asset-image" className="flex flex-col items-center cursor-pointer">
-                <div className="p-4 bg-blue-100 rounded-full mb-4">
-                  <Camera className="w-10 h-10 text-blue-500" />
-                </div>
-                <p className="text-sm font-medium text-slate-700 mb-1">Upload Foto Kerusakan</p>
-                <p className="text-xs text-slate-500 mb-4">Klik untuk memilih gambar atau seret ke sini</p>
-                <GlassButton type="button" variant="outline" size="sm">
+              <label
+                htmlFor="asset-image"
+                className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {imageDataUrl ? (
+                  <img
+                    src={imageDataUrl}
+                    alt="Preview kerusakan"
+                    className="w-full max-h-56 object-cover rounded-lg mb-3"
+                  />
+                ) : (
+                  <div className="p-4 bg-blue-100 rounded-full mb-4">
+                    <Camera className="w-10 h-10 text-blue-500" />
+                  </div>
+                )}
+                <p className="text-sm font-medium text-slate-700 mb-1">
+                  {imageDataUrl ? "Gambar berhasil dipilih" : "Upload Foto Kerusakan"}
+                </p>
+                <p className="text-xs text-slate-500 mb-4">
+                  {isReadingImage
+                    ? "Memproses gambar..."
+                    : imageName
+                      ? imageName
+                      : "Klik untuk memilih gambar"}
+                </p>
+                <GlassButton type="button" variant="outline" size="sm" disabled={isReadingImage}>
                   <Camera className="w-4 h-4 mr-2" />
-                  Pilih Gambar
+                  {imageDataUrl ? "Ganti Gambar" : "Pilih Gambar"}
                 </GlassButton>
               </label>
+              {imageDataUrl ? (
+                <GlassButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setImageDataUrl("")
+                    setImageName("")
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Hapus Gambar
+                </GlassButton>
+              ) : null}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -282,11 +353,22 @@ export default function StudentReportPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Lokasi</label>
-                <GlassInput
-                  placeholder="contoh: Ruang 101"
+                <select
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                />
+                  className="w-full px-4 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Pilih lokasi kelas...</option>
+                  {classes.map((classItem) => {
+                    const label = `${classItem.name}${classItem.grade ? ` - Grade ${classItem.grade}` : ""}`
+                    return (
+                      <option key={classItem.id} value={label}>
+                        {label}
+                      </option>
+                    )
+                  })}
+                  <option value="Area Umum Sekolah">Area Umum Sekolah</option>
+                </select>
               </div>
 
               <div>
@@ -348,6 +430,13 @@ export default function StudentReportPage() {
                   className="cursor-pointer hover:bg-slate-50 transition-colors"
                   onClick={() => setSelectedReport(report)}
                 >
+                  {report.imageUrl ? (
+                    <img
+                      src={report.imageUrl}
+                      alt={`Foto laporan ${report.assetName}`}
+                      className="w-full h-36 object-cover rounded-lg mb-3"
+                    />
+                  ) : null}
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
                       <div className="p-2 bg-slate-100 rounded-lg">
@@ -409,6 +498,17 @@ export default function StudentReportPage() {
                 <p className="text-xs text-slate-400">Deskripsi</p>
                 <p className="text-slate-800">{selectedReport.description}</p>
               </div>
+
+              {selectedReport.imageUrl ? (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-400 mb-2">Foto Kerusakan</p>
+                  <img
+                    src={selectedReport.imageUrl}
+                    alt={`Foto laporan ${selectedReport.assetName}`}
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                </div>
+              ) : null}
 
               <div className="p-3 bg-slate-50 rounded-lg">
                 <p className="text-xs text-slate-400">Tanggal Laporan</p>

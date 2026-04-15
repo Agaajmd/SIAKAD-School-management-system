@@ -116,6 +116,33 @@ function parseScore(value: unknown) {
   return Number.isFinite(next) ? next : undefined
 }
 
+function parseSerializedUrlList(value: string) {
+  const raw = String(value || "").trim()
+  if (!raw) return [] as string[]
+
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      }
+    } catch {
+      // Fallback to legacy single-url format.
+    }
+  }
+
+  return [raw]
+}
+
+function serializeUrlList(list: string[]) {
+  const normalized = list.map((item) => String(item || "").trim()).filter(Boolean)
+  if (normalized.length === 0) return ""
+  if (normalized.length === 1) return normalized[0]
+  return JSON.stringify(normalized)
+}
+
 function isHeaderRow(row: string[]) {
   const first = normalizeSheetKey(row[0] || "")
   const second = normalizeSheetKey(row[1] || "")
@@ -124,13 +151,17 @@ function isHeaderRow(row: string[]) {
 }
 
 function normalizeSubmissionRow(row: string[]): TaskSubmission {
+  const attachmentUrls = parseSerializedUrlList(row[4] || "")
+  const imageUrls = parseSerializedUrlList(row[5] || "")
   return {
     id: row[0] || "",
     taskId: row[1] || "",
     studentId: row[2] || "",
     submittedAt: row[3] || new Date().toISOString(),
-    attachmentUrl: normalizeMaybeString(row[4]),
-    imageUrl: normalizeMaybeString(row[5]),
+    attachmentUrl: attachmentUrls[0] || undefined,
+    attachmentUrls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+    imageUrl: imageUrls[0] || undefined,
+    imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
     attachmentName: normalizeMaybeString(row[6]),
     score: parseScore(row[7]),
     feedback: normalizeMaybeString(row[8]),
@@ -139,13 +170,24 @@ function normalizeSubmissionRow(row: string[]): TaskSubmission {
 }
 
 function toSubmissionSheetRow(submission: TaskSubmission, updatedAt: string) {
+  const attachmentUrls = Array.isArray(submission.attachmentUrls)
+    ? submission.attachmentUrls
+    : submission.attachmentUrl
+      ? [submission.attachmentUrl]
+      : []
+  const imageUrls = Array.isArray(submission.imageUrls)
+    ? submission.imageUrls
+    : submission.imageUrl
+      ? [submission.imageUrl]
+      : []
+
   return [
     submission.id,
     submission.taskId,
     submission.studentId,
     submission.submittedAt,
-    submission.attachmentUrl || "",
-    submission.imageUrl || "",
+    serializeUrlList(attachmentUrls),
+    serializeUrlList(imageUrls),
     submission.attachmentName || "",
     submission.score == null ? "" : String(submission.score),
     submission.feedback || "",
@@ -301,13 +343,35 @@ export async function upsertDbTaskSubmission(input: TaskSubmission): Promise<Tas
   const existingSubmission = existing ? normalizeSubmissionRow(existing.row) : null
   const now = new Date().toISOString()
 
+  const nextAttachmentUrlsRaw =
+    input.attachmentUrls != null
+      ? input.attachmentUrls
+      : input.attachmentUrl != null
+        ? [input.attachmentUrl]
+        : existingSubmission?.attachmentUrls || (existingSubmission?.attachmentUrl ? [existingSubmission.attachmentUrl] : [])
+  const nextImageUrlsRaw =
+    input.imageUrls != null
+      ? input.imageUrls
+      : input.imageUrl != null
+        ? [input.imageUrl]
+        : existingSubmission?.imageUrls || (existingSubmission?.imageUrl ? [existingSubmission.imageUrl] : [])
+
+  const nextAttachmentUrls = nextAttachmentUrlsRaw
+    .map((item) => normalizeMaybeString(item))
+    .filter((item): item is string => Boolean(item))
+  const nextImageUrls = nextImageUrlsRaw
+    .map((item) => normalizeMaybeString(item))
+    .filter((item): item is string => Boolean(item))
+
   const next: TaskSubmission = {
     id: input.id || existingSubmission?.id || `sub-${Date.now()}`,
     taskId: String(input.taskId || existingSubmission?.taskId || "").trim(),
     studentId: String(input.studentId || existingSubmission?.studentId || "").trim(),
     submittedAt: input.submittedAt || existingSubmission?.submittedAt || now,
-    attachmentUrl: normalizeMaybeString(input.attachmentUrl),
-    imageUrl: normalizeMaybeString(input.imageUrl),
+    attachmentUrl: nextAttachmentUrls[0],
+    attachmentUrls: nextAttachmentUrls.length > 0 ? [...new Set(nextAttachmentUrls)] : undefined,
+    imageUrl: nextImageUrls[0],
+    imageUrls: nextImageUrls.length > 0 ? [...new Set(nextImageUrls)] : undefined,
     attachmentName: normalizeMaybeString(input.attachmentName),
     score: input.score != null ? Number(input.score) : existingSubmission?.score,
     feedback: input.feedback != null ? String(input.feedback) : existingSubmission?.feedback,

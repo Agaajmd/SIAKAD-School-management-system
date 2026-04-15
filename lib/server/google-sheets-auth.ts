@@ -104,13 +104,83 @@ async function getSheetsClient() {
 }
 
 function normalizeUserRow(row: string[]): DbUser {
+  const normalizeUserRole = (value: unknown): UserRole => {
+    const normalized = String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "_")
+      .replace(/-/g, "_")
+
+    if (
+      normalized === "STUDENT" ||
+      normalized === "EMPLOYEE" ||
+      normalized === "ADMIN" ||
+      normalized === "SUPER_ADMIN" ||
+      normalized === "PARENT" ||
+      normalized === "CANTEEN_OWNER"
+    ) {
+      return normalized
+    }
+
+    if (normalized === "TEACHER" || normalized === "GURU") {
+      return "EMPLOYEE"
+    }
+
+    if (normalized === "SISWA" || normalized === "MURID" || normalized === "PELAJAR") {
+      return "STUDENT"
+    }
+
+    if (
+      normalized === "ORANGTUA" ||
+      normalized === "ORANG_TUA" ||
+      normalized === "ORANG_TUA_WALI" ||
+      normalized === "WALI" ||
+      normalized === "WALI_MURID"
+    ) {
+      return "PARENT"
+    }
+
+    if (
+      normalized === "ADMINISTRATOR" ||
+      normalized === "OPERATOR" ||
+      normalized === "TU" ||
+      normalized === "TATA_USAHA"
+    ) {
+      return "ADMIN"
+    }
+
+    if (normalized === "STAFF" || normalized === "KARYAWAN") {
+      return "EMPLOYEE"
+    }
+
+    if (normalized === "PRINCIPAL" || normalized === "KEPALA_SEKOLAH") {
+      return "SUPER_ADMIN"
+    }
+
+    if (normalized === "KEPSEK") {
+      return "SUPER_ADMIN"
+    }
+
+    if (
+      normalized === "CANTEENOWNER" ||
+      normalized === "CANTEEN" ||
+      normalized === "KANTIN_OWNER" ||
+      normalized === "PENGELOLA_KANTIN" ||
+      normalized === "PENJAGA_KANTIN"
+    ) {
+      return "CANTEEN_OWNER"
+    }
+
+    return "PARENT"
+  }
+
   return {
     id: row[0] || "",
     name: row[1] || "",
     email: (row[2] || "").toLowerCase(),
     passwordHash: row[3] || "",
     avatar: row[4] || "/placeholder-user.jpg",
-    role: (row[5] as UserRole) || "PARENT",
+    role: normalizeUserRole(row[5]),
     classId: row[6] || undefined,
     phone: row[7] || undefined,
     isActive: String(row[8] || "true").toLowerCase() !== "false",

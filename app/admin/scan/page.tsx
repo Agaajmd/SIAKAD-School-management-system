@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
@@ -10,13 +10,13 @@ import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassTextarea } from "@/components/atoms/glass-textarea"
 import { GlassModal } from "@/components/molecules/glass-modal"
+import { toast } from "sonner"
 import {
   CheckCircle,
   Clock,
   AlertCircle,
   FileText,
   X,
-  Package,
   Filter,
   Search,
   MapPin,
@@ -34,6 +34,7 @@ interface AssetReport {
   assetName: string
   damageType: string
   description: string
+  imageUrl?: string
   status: ReportStatus
   createdAt: string
   location: string
@@ -45,7 +46,11 @@ interface AssetReport {
 }
 
 export default function AdminReportsPage() {
-  const [admin, setAdmin] = useState<{ name: string; avatar: string } | null>(null)
+  const [admin, setAdmin] = useState<{ name: string; avatar: string }>({
+    name: "Admin",
+    avatar: "/placeholder-user.jpg",
+  })
+  const [isLoadingPage, setIsLoadingPage] = useState(true)
   const [reports, setReports] = useState<AssetReport[]>([])
   const [selectedReport, setSelectedReport] = useState<AssetReport | null>(null)
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "in_progress" | "resolved">("all")
@@ -54,34 +59,71 @@ export default function AdminReportsPage() {
   const [actionType, setActionType] = useState<"process" | "resolve">("process")
   const [actionNote, setActionNote] = useState("")
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false)
+
+  const loadReports = useCallback(async () => {
+    const [profileRes, reportsRes] = await Promise.all([
+      fetch("/api/dashboard/admin", { cache: "no-store" }),
+      fetch("/api/admin/asset-reports", { cache: "no-store" }),
+    ])
+
+    if (profileRes.ok) {
+      const data = await profileRes.json()
+      if (data.admin) {
+        setAdmin({
+          name: String(data.admin.name || "Admin"),
+          avatar: String(data.admin.avatar || "/placeholder-user.jpg"),
+        })
+      }
+    }
+
+    if (!reportsRes.ok) {
+      throw new Error("Gagal memuat laporan aset")
+    }
+
+    const reportsData = await reportsRes.json()
+    const normalized: AssetReport[] = Array.isArray(reportsData.reports)
+      ? reportsData.reports.map((report: any) => ({
+          id: String(report.id || ""),
+          assetId: String(report.assetId || report.id || ""),
+          assetName: String(report.assetName || "-"),
+          damageType: String(report.damageType || "other"),
+          description: String(report.description || "-"),
+          imageUrl: report.imageUrl ? String(report.imageUrl) : undefined,
+          status:
+            report.status === "in-progress"
+              ? "in_progress"
+              : report.status === "resolved"
+                ? "resolved"
+                : report.status === "in_progress"
+                  ? "in_progress"
+                  : "pending",
+          createdAt: String(report.createdAt || new Date().toISOString()),
+          location: String(report.location || "Sekolah"),
+          reportedBy: String(report.reportedBy || report.studentId || "-"),
+          reporterClass: String(report.reporterClass || "-"),
+          assignedTo: report.assignedTo ? String(report.assignedTo) : undefined,
+          resolvedAt: report.resolvedAt ? String(report.resolvedAt) : undefined,
+          resolution: report.resolution ? String(report.resolution) : undefined,
+        }))
+      : []
+
+    setReports(normalized)
+  }, [])
 
   useEffect(() => {
     let active = true
     const load = async () => {
       try {
-        const res = await fetch("/api/dashboard/admin", { cache: "no-store" })
-        if (!res.ok) return
-        const data = await res.json()
-        if (!active) return
-        if (data.admin) setAdmin(data.admin)
-        if (Array.isArray(data.reports)) {
-          const normalized: AssetReport[] = data.reports.map((report: any) => ({
-            id: report.id,
-            assetId: report.id,
-            assetName: report.title,
-            damageType: report.type,
-            description: report.title,
-            status: report.status === "in-progress" ? "in_progress" : report.status,
-            createdAt: report.date,
-            location: "Sekolah",
-            reportedBy: report.reporter,
-            reporterClass: "-",
-            assignedTo: report.status === "in-progress" ? "Tim Maintenance" : undefined,
-          }))
-          setReports(normalized)
-        }
+        await loadReports()
       } catch {
-        // Keep fallback empty data.
+        if (active) {
+          toast.error("Gagal memuat laporan aset")
+        }
+      } finally {
+        if (active) {
+          setIsLoadingPage(false)
+        }
       }
     }
 
@@ -89,7 +131,7 @@ export default function AdminReportsPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [loadReports])
 
   const filteredReports = reports.filter((report) => {
     const matchesStatus = filterStatus === "all" || report.status === filterStatus
@@ -155,46 +197,75 @@ export default function AdminReportsPage() {
     })
   }
 
-  const handleProcessReport = () => {
+  const handleProcessReport = async () => {
     if (!selectedReport) return
 
-    setReports(
-      reports.map((r) =>
-        r.id === selectedReport.id
-          ? { ...r, status: "in_progress", assignedTo: actionNote || "Tim Maintenance" }
-          : r
-      )
-    )
-    setSelectedReport({ ...selectedReport, status: "in_progress", assignedTo: actionNote || "Tim Maintenance" })
-    setShowActionModal(false)
-    setActionNote("")
+    setIsActionSubmitting(true)
+    try {
+      const assignedTo = actionNote.trim() || "Tim Maintenance"
+      const res = await fetch("/api/admin/asset-reports", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedReport.id,
+          status: "in_progress",
+          assignedTo,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error("Gagal memperbarui laporan")
+      }
+
+      await loadReports()
+      setShowActionModal(false)
+      setActionNote("")
+      setSelectedReport(null)
+      toast.success("Laporan diproses")
+    } catch {
+      toast.error("Gagal memperbarui laporan")
+    } finally {
+      setIsActionSubmitting(false)
+    }
   }
 
-  const handleResolveReport = () => {
+  const handleResolveReport = async () => {
     if (!selectedReport) return
 
-    setReports(
-      reports.map((r) =>
-        r.id === selectedReport.id
-          ? { ...r, status: "resolved", resolvedAt: new Date().toISOString(), resolution: actionNote }
-          : r
-      )
-    )
-    setSelectedReport({
-      ...selectedReport,
-      status: "resolved",
-      resolvedAt: new Date().toISOString(),
-      resolution: actionNote,
-    })
-    setShowActionModal(false)
-    setActionNote("")
+    setIsActionSubmitting(true)
+    try {
+      const res = await fetch("/api/admin/asset-reports", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedReport.id,
+          status: "resolved",
+          resolution: actionNote.trim() || undefined,
+          assignedTo: selectedReport.assignedTo,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error("Gagal memperbarui laporan")
+      }
+
+      await loadReports()
+      setShowActionModal(false)
+      setActionNote("")
+      setSelectedReport(null)
+      toast.success("Laporan diselesaikan")
+    } catch {
+      toast.error("Gagal memperbarui laporan")
+    } finally {
+      setIsActionSubmitting(false)
+    }
   }
 
   const pendingCount = reports.filter((r) => r.status === "pending").length
   const inProgressCount = reports.filter((r) => r.status === "in_progress").length
   const resolvedCount = reports.filter((r) => r.status === "resolved").length
 
-  if (!admin) {
+  if (isLoadingPage) {
     return <RouteLoading />
   }
 
@@ -283,7 +354,11 @@ export default function AdminReportsPage() {
         <div className="space-y-3">
           {filteredReports.length === 0 ? (
             <GlassCard>
-              <EmptySkeleton rows={3} className="py-4" />
+              <div className="py-6 px-4 text-center space-y-2">
+                <EmptySkeleton rows={2} className="py-2" />
+                <p className="text-sm text-slate-500">Belum ada laporan aset tersedia.</p>
+                <p className="text-xs text-slate-400">Coba refresh setelah siswa mengirim laporan baru.</p>
+              </div>
             </GlassCard>
           ) : (
             filteredReports.map((report) => (
@@ -292,6 +367,13 @@ export default function AdminReportsPage() {
                 className="cursor-pointer hover:bg-slate-50 transition-colors"
                 onClick={() => setSelectedReport(report)}
               >
+                {report.imageUrl ? (
+                  <img
+                    src={report.imageUrl}
+                    alt={`Foto kerusakan ${report.assetName}`}
+                    className="w-full h-36 object-cover rounded-lg mb-3"
+                  />
+                ) : null}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-start gap-3">
                     <div
@@ -386,6 +468,17 @@ export default function AdminReportsPage() {
               <p className="text-slate-800">{selectedReport.description}</p>
             </div>
 
+            {selectedReport.imageUrl ? (
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-400 mb-2">Foto Kerusakan</p>
+                <img
+                  src={selectedReport.imageUrl}
+                  alt={`Foto kerusakan ${selectedReport.assetName}`}
+                  className="w-full h-52 object-cover rounded-lg"
+                />
+              </div>
+            ) : null}
+
             <div className="p-3 bg-slate-50 rounded-lg">
               <p className="text-xs text-slate-400">Tanggal Laporan</p>
               <p className="font-medium text-slate-800">{formatDate(selectedReport.createdAt)}</p>
@@ -474,14 +567,26 @@ export default function AdminReportsPage() {
             </div>
 
             <div className="flex gap-3 pt-3 border-t border-slate-100">
-              <GlassButton variant="ghost" className="flex-1" onClick={() => setShowActionModal(false)}>
+              <GlassButton
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setShowActionModal(false)}
+                disabled={isActionSubmitting}
+              >
                 Batal
               </GlassButton>
               <GlassButton
                 className={`flex-1 ${actionType === "resolve" ? "bg-emerald-500 hover:bg-emerald-600" : ""}`}
-                onClick={actionType === "process" ? handleProcessReport : handleResolveReport}
+                onClick={() => {
+                  if (actionType === "process") {
+                    void handleProcessReport()
+                  } else {
+                    void handleResolveReport()
+                  }
+                }}
+                disabled={isActionSubmitting}
               >
-                {actionType === "process" ? "Proses" : "Selesaikan"}
+                {isActionSubmitting ? "Menyimpan..." : actionType === "process" ? "Proses" : "Selesaikan"}
               </GlassButton>
             </div>
           </div>

@@ -34,8 +34,10 @@ type Task = {
   dueDate: string
   createdAt: string
   attachmentUrl?: string
+  attachmentUrls?: string[]
   attachmentName?: string
   imageUrl?: string
+  imageUrls?: string[]
   maxScore: number
 }
 
@@ -45,7 +47,9 @@ type TaskSubmission = {
   studentId: string
   submittedAt: string
   attachmentUrl?: string
+  attachmentUrls?: string[]
   imageUrl?: string
+  imageUrls?: string[]
   attachmentName?: string
   score?: number
   feedback?: string
@@ -61,6 +65,38 @@ const fileToDataUrl = (file: File) =>
     reader.onerror = () => reject(new Error("Gagal membaca file"))
     reader.readAsDataURL(file)
   })
+
+const toUrlList = (primary?: string, list?: string[]) => {
+  const values = [primary, ...(Array.isArray(list) ? list : [])]
+  const normalized = values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+  return [...new Set(normalized)]
+}
+
+const normalizeTaskMediaFields = (task: Task): Task => {
+  const attachmentUrls = toUrlList(task.attachmentUrl, task.attachmentUrls)
+  const imageUrls = toUrlList(task.imageUrl, task.imageUrls)
+  return {
+    ...task,
+    attachmentUrl: attachmentUrls[0],
+    attachmentUrls,
+    imageUrl: imageUrls[0],
+    imageUrls,
+  }
+}
+
+const normalizeSubmissionMediaFields = (submission: TaskSubmission): TaskSubmission => {
+  const attachmentUrls = toUrlList(submission.attachmentUrl, submission.attachmentUrls)
+  const imageUrls = toUrlList(submission.imageUrl, submission.imageUrls)
+  return {
+    ...submission,
+    attachmentUrl: attachmentUrls[0],
+    attachmentUrls,
+    imageUrl: imageUrls[0],
+    imageUrls,
+  }
+}
 
 export default function EmployeeAssignmentsPage() {
   const [employee, setEmployee] = useState({ id: "", subject: "-" })
@@ -88,8 +124,8 @@ export default function EmployeeAssignmentsPage() {
     classId: "",
     dueDate: "",
     maxScore: 100,
-    attachmentUrl: "",
-    imageUrl: "",
+    attachmentUrls: [""],
+    imageUrls: [""],
   })
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
 
@@ -120,8 +156,16 @@ export default function EmployeeAssignmentsPage() {
           classId: prev.classId || resolvedClasses[0]?.id || "",
         }))
 
-        setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
-        setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+        setAllTasks(
+          Array.isArray(data.tasks)
+            ? data.tasks.map((task: Task) => normalizeTaskMediaFields(task))
+            : [],
+        )
+        setAllSubmissions(
+          Array.isArray(data.submissions)
+            ? data.submissions.map((submission: TaskSubmission) => normalizeSubmissionMediaFields(submission))
+            : [],
+        )
         setStudentsById(data.studentsById && typeof data.studentsById === "object" ? data.studentsById : {})
         if (resolvedClasses.length === 0 && Array.isArray(data.tasks)) {
           const classOptions = Array.from(new Set((data.tasks as Task[]).map((task) => task.classId).filter(Boolean))).map((id) => ({
@@ -177,8 +221,8 @@ export default function EmployeeAssignmentsPage() {
       classId: classes[0]?.id || "",
       dueDate: "",
       maxScore: 100,
-      attachmentUrl: "",
-      imageUrl: "",
+      attachmentUrls: [""],
+      imageUrls: [""],
     })
     setAttachmentFile(null)
     setEditingTaskId(null)
@@ -205,8 +249,8 @@ export default function EmployeeAssignmentsPage() {
       return
     }
 
-    let attachmentUrl = formData.attachmentUrl.trim() || undefined
-    let imageUrl = formData.imageUrl.trim() || undefined
+    let attachmentUrls = toUrlList(undefined, formData.attachmentUrls)
+    let imageUrls = toUrlList(undefined, formData.imageUrls)
     let attachmentName: string | undefined = undefined
 
     if (attachmentFile) {
@@ -216,10 +260,11 @@ export default function EmployeeAssignmentsPage() {
       }
       try {
         const encoded = await fileToDataUrl(attachmentFile)
-        attachmentUrl = encoded
         attachmentName = attachmentFile.name
         if (attachmentFile.type.startsWith("image/")) {
-          imageUrl = encoded
+          imageUrls = [...new Set([...imageUrls, encoded])]
+        } else {
+          attachmentUrls = [...new Set([...attachmentUrls, encoded])]
         }
       } catch {
         toast.error("Gagal memproses file")
@@ -239,9 +284,11 @@ export default function EmployeeAssignmentsPage() {
         ? allTasks.find((t) => t.id === editingTaskId)?.createdAt || new Date().toISOString()
         : new Date().toISOString(),
       maxScore: Number(formData.maxScore) || 100,
-      attachmentUrl,
+      attachmentUrl: attachmentUrls[0],
+      attachmentUrls,
       attachmentName,
-      imageUrl,
+      imageUrl: imageUrls[0],
+      imageUrls,
     }
 
     setIsSubmitting(true)
@@ -254,10 +301,11 @@ export default function EmployeeAssignmentsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Gagal menyimpan tugas")
 
+      const normalizedTask = normalizeTaskMediaFields(data.task as Task)
       setAllTasks((prev) =>
         editingTaskId
-          ? prev.map((task) => (task.id === editingTaskId ? data.task : task))
-          : [data.task, ...prev],
+          ? prev.map((task) => (task.id === editingTaskId ? normalizedTask : task))
+          : [normalizedTask, ...prev],
       )
 
       toast.success(editingTaskId ? "Tugas berhasil diperbarui" : "Tugas berhasil dibuat", {
@@ -282,8 +330,12 @@ export default function EmployeeAssignmentsPage() {
       classId: task.classId,
       dueDate: task.dueDate,
       maxScore: task.maxScore,
-      attachmentUrl: task.attachmentUrl || "",
-      imageUrl: task.imageUrl || "",
+      attachmentUrls: toUrlList(task.attachmentUrl, task.attachmentUrls).length > 0
+        ? toUrlList(task.attachmentUrl, task.attachmentUrls)
+        : [""],
+      imageUrls: toUrlList(task.imageUrl, task.imageUrls).length > 0
+        ? toUrlList(task.imageUrl, task.imageUrls)
+        : [""],
     })
     setAttachmentFile(null)
     setShowCreateModal(true)
@@ -315,9 +367,12 @@ export default function EmployeeAssignmentsPage() {
         if (!res.ok) return
         const data = await res.json()
         if (Array.isArray(data.submissions)) {
+          const normalizedSubmissions = data.submissions.map((submission: TaskSubmission) =>
+            normalizeSubmissionMediaFields(submission),
+          )
           setAllSubmissions((prev) => {
             const remaining = prev.filter((item) => item.taskId !== task.id)
-            return [...data.submissions, ...remaining]
+            return [...normalizedSubmissions, ...remaining]
           })
         }
         if (data.studentsById && typeof data.studentsById === "object") {
@@ -359,7 +414,7 @@ export default function EmployeeAssignmentsPage() {
         throw new Error(data?.error || "Gagal menyimpan nilai")
       }
 
-      const nextSubmission = data.submission as TaskSubmission
+      const nextSubmission = normalizeSubmissionMediaFields(data.submission as TaskSubmission)
       setAllSubmissions((prev) => prev.map((item) => (item.id === nextSubmission.id ? nextSubmission : item)))
       toast.success("Penilaian berhasil disimpan")
       setShowReviewModal(false)
@@ -429,7 +484,9 @@ export default function EmployeeAssignmentsPage() {
             getTaskList().map((task) => {
               const stats = getSubmissionStats(task.id)
               const classRoom = classes.find((c) => c.id === task.classId)
-              const className = classRoom ? getClassLabel(classRoom) : task.classId || "Unknown"
+              const className = classRoom ? getClassLabel(classRoom) : "Kelas tidak ditemukan"
+              const taskAttachmentUrls = toUrlList(task.attachmentUrl, task.attachmentUrls)
+              const taskImageUrls = toUrlList(task.imageUrl, task.imageUrls)
 
               return (
                 <GlassCard key={task.id}>
@@ -448,18 +505,19 @@ export default function EmployeeAssignmentsPage() {
                         <span className="flex items-center gap-1 text-amber-500"><FileText className="w-3.5 h-3.5" />{stats.pendingReview} perlu review</span>
                       </div>
 
-                      {(task.attachmentUrl || task.imageUrl) && (
+                      {(taskAttachmentUrls.length > 0 || taskImageUrls.length > 0) && (
                         <div className="flex flex-wrap items-center gap-2 mt-2">
-                          {task.attachmentUrl && (
-                            <a href={task.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100">
-                              <Link2 className="w-3.5 h-3.5" /> {task.attachmentName || "File/Link Tugas"}
+                          {taskAttachmentUrls.map((url, index) => (
+                            <a key={`${task.id}-attachment-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100">
+                              <Link2 className="w-3.5 h-3.5" />
+                              {task.attachmentName && index === 0 ? task.attachmentName : `Link Tugas ${index + 1}`}
                             </a>
-                          )}
-                          {task.imageUrl && (
-                            <a href={task.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200">
-                              <ImageIcon className="w-3.5 h-3.5" /> Gambar Tugas
+                          ))}
+                          {taskImageUrls.map((url, index) => (
+                            <a key={`${task.id}-image-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200">
+                              <ImageIcon className="w-3.5 h-3.5" /> Gambar Tugas {index + 1}
                             </a>
-                          )}
+                          ))}
                         </div>
                       )}
 
@@ -517,13 +575,107 @@ export default function EmployeeAssignmentsPage() {
               <button onClick={previewSelectedFile} className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">Preview file</button>
             )}
           </div>
-          <div>
+          <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">Link Materi/Tugas (Opsional)</label>
-            <input type="url" placeholder="https://..." value={formData.attachmentUrl} onChange={(e) => setFormData({ ...formData, attachmentUrl: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+            {formData.attachmentUrls.map((url, index) => (
+              <div key={`attachment-url-${index}`} className="flex items-center gap-2">
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={url}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      attachmentUrls: prev.attachmentUrls.map((item, idx) => (idx === index ? e.target.value : item)),
+                    }))
+                  }
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+                {index === formData.attachmentUrls.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        attachmentUrls: [...prev.attachmentUrls, ""],
+                      }))
+                    }
+                    className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                    aria-label="Tambah link materi"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        attachmentUrls:
+                          prev.attachmentUrls.length <= 1
+                            ? [""]
+                            : prev.attachmentUrls.filter((_, idx) => idx !== index),
+                      }))
+                    }
+                    className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-red-200 text-red-500 hover:bg-red-50"
+                    aria-label="Hapus link materi"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-          <div>
+          <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">URL Gambar Tugas (Opsional)</label>
-            <input type="url" placeholder="https://.../gambar.jpg" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+            {formData.imageUrls.map((url, index) => (
+              <div key={`image-url-${index}`} className="flex items-center gap-2">
+                <input
+                  type="url"
+                  placeholder="https://.../gambar.jpg"
+                  value={url}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      imageUrls: prev.imageUrls.map((item, idx) => (idx === index ? e.target.value : item)),
+                    }))
+                  }
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+                {index === formData.imageUrls.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        imageUrls: [...prev.imageUrls, ""],
+                      }))
+                    }
+                    className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                    aria-label="Tambah URL gambar"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        imageUrls:
+                          prev.imageUrls.length <= 1
+                            ? [""]
+                            : prev.imageUrls.filter((_, idx) => idx !== index),
+                      }))
+                    }
+                    className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-red-200 text-red-500 hover:bg-red-50"
+                    aria-label="Hapus URL gambar"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
           <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
             <button type="button" onClick={() => { setShowCreateModal(false); resetForm() }} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Batal</button>
@@ -550,31 +702,40 @@ export default function EmployeeAssignmentsPage() {
                     </GlassCard>
                   )
                 }
-                return submissions.map((sub) => (
-                  <div key={sub.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <img src="/placeholder-user.jpg" alt="Student" className="w-10 h-10 rounded-full" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 text-sm">{studentsById[sub.studentId] || `Siswa ${sub.studentId}`}</p>
-                        <p className="text-xs text-slate-500">{formatDate(sub.submittedAt)}</p>
+                return submissions.map((sub) => {
+                  const submissionAttachmentUrls = toUrlList(sub.attachmentUrl, sub.attachmentUrls)
+                  const submissionImageUrls = toUrlList(sub.imageUrl, sub.imageUrls)
+
+                  return (
+                    <div key={sub.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <img src="/placeholder-user.jpg" alt="Student" className="w-10 h-10 rounded-full" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800 text-sm">{studentsById[sub.studentId] || "Siswa"}</p>
+                          <p className="text-xs text-slate-500">{formatDate(sub.submittedAt)}</p>
+                        </div>
+                        {sub.status === "GRADED" ? (
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg">{sub.score}/{selectedTask.maxScore}</span>
+                        ) : (
+                          <button onClick={() => openReviewModal(sub)} className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors">Nilai</button>
+                        )}
                       </div>
-                      {sub.status === "GRADED" ? (
-                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg">{sub.score}/{selectedTask.maxScore}</span>
-                      ) : (
-                        <button onClick={() => openReviewModal(sub)} className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors">Nilai</button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sub.attachmentUrl && <a href={sub.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100"><Link2 className="w-3.5 h-3.5" />{sub.attachmentName || "File/Link Jawaban"}</a>}
-                      {sub.imageUrl && <a href={sub.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200"><ImageIcon className="w-3.5 h-3.5" />Gambar Jawaban</a>}
-                    </div>
-                    {sub.feedback ? (
-                      <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg p-2">
-                        <span className="font-medium">Catatan:</span> {sub.feedback}
+                      <div className="flex flex-wrap gap-2">
+                        {submissionAttachmentUrls.map((url, index) => (
+                          <a key={`${sub.id}-attachment-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100"><Link2 className="w-3.5 h-3.5" />{sub.attachmentName && index === 0 ? sub.attachmentName : `Link Jawaban ${index + 1}`}</a>
+                        ))}
+                        {submissionImageUrls.map((url, index) => (
+                          <a key={`${sub.id}-image-${index}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200"><ImageIcon className="w-3.5 h-3.5" />Gambar Jawaban {index + 1}</a>
+                        ))}
                       </div>
-                    ) : null}
-                  </div>
-                ))
+                      {sub.feedback ? (
+                        <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg p-2">
+                          <span className="font-medium">Catatan:</span> {sub.feedback}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })
               })()}
             </div>
           </div>
@@ -585,7 +746,7 @@ export default function EmployeeAssignmentsPage() {
         {selectedSubmission && selectedTask ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-medium text-slate-800">{studentsById[selectedSubmission.studentId] || selectedSubmission.studentId}</p>
+              <p className="text-sm font-medium text-slate-800">{studentsById[selectedSubmission.studentId] || "Siswa"}</p>
               <p className="text-xs text-slate-500 mt-1">Dikumpulkan: {formatDate(selectedSubmission.submittedAt)}</p>
             </div>
 

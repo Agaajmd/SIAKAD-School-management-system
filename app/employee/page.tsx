@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { AttendanceLeaderboard } from "@/components/organisms/attendance-leaderboard"
+import { SchoolWalletTopup } from "@/components/organisms/school-wallet-topup"
+import { WalletCard } from "@/components/organisms/wallet-card"
 import { Calendar, LayoutGrid, BookOpen, Users, Award } from "lucide-react"
 import Link from "next/link"
 import type { Student } from "@/lib/data-model"
@@ -88,7 +90,6 @@ export default function EmployeeDashboard() {
         if (active) setIsLoading(false)
       }
     }
-
     load()
     return () => {
       active = false
@@ -123,6 +124,20 @@ export default function EmployeeDashboard() {
           <h1 className="text-2xl font-bold text-slate-800">Selamat datang,</h1>
           <p className="text-slate-500">{employee.name}</p>
         </div>
+
+        <SchoolWalletTopup
+          role="EMPLOYEE"
+          renderTrigger={({ openModal, walletBalance, pendingAmount, isLoading }) => (
+            <WalletCard
+              ownerName={employee.name}
+              secondaryLabel={employee.subject || "Guru"}
+              walletBalance={walletBalance}
+              pendingAmount={pendingAmount}
+              isLoading={isLoading}
+              onTopupClick={openModal}
+            />
+          )}
+        />
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

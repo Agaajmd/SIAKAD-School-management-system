@@ -148,6 +148,10 @@ export default function StudentProfile() {
     )
   }
 
+  const classLabel = student.className
+    ? `${student.className}${student.classGrade ? ` - Grade ${student.classGrade}` : ""}`
+    : (student.classId ?? "-").toUpperCase()
+
   return (
     <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
       <div className="max-w-2xl mx-auto space-y-4">
@@ -175,7 +179,7 @@ export default function StudentProfile() {
 
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-600 border border-blue-200 mt-3">
               <GraduationCap className="w-4 h-4" />
-              <span className="text-sm font-medium">{(student.classId ?? "-").toUpperCase()}</span>
+              <span className="text-sm font-medium">{classLabel}</span>
             </div>
           </div>
         </GlassCard>
@@ -190,7 +194,7 @@ export default function StudentProfile() {
         <GlassCard>
           <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2"><User className="w-5 h-5 text-blue-500" />Informasi Siswa</h2>
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"><GraduationCap className="w-5 h-5 text-slate-400" /><div><p className="text-xs text-slate-400">Kelas</p><p className="font-medium text-slate-800">{(student.classId ?? "-").toUpperCase()}</p></div></div>
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"><GraduationCap className="w-5 h-5 text-slate-400" /><div><p className="text-xs text-slate-400">Kelas</p><p className="font-medium text-slate-800">{classLabel}</p></div></div>
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"><Mail className="w-5 h-5 text-slate-400" /><div><p className="text-xs text-slate-400">Email</p><p className="font-medium text-slate-800">{student.email}</p></div></div>
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"><Phone className="w-5 h-5 text-slate-400" /><div><p className="text-xs text-slate-400">Telepon</p><p className="font-medium text-slate-800">{editForm.phone || "-"}</p></div></div>
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl"><Calendar className="w-5 h-5 text-slate-400" /><div><p className="text-xs text-slate-400">Status</p><p className="font-medium text-slate-800">Aktif</p></div></div>

@@ -17,6 +17,7 @@ type ParentAccount = {
   name: string
   email: string
   phone?: string
+  childrenIds?: string[]
   childId?: string
   childName: string
 }
@@ -169,11 +170,18 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
 
       const nextParents = Array.isArray(parentsData.parents) ? (parentsData.parents as ParentAccount[]) : []
       const normalizedParents = nextParents.map((parent) => {
-        const childId = parent.childId || ""
-        if (!childId || parent.childName !== "-") return parent
+        const childId = parent.childId || parent.childrenIds?.[0] || ""
+        if (!childId) return parent
+
+        const resolvedName =
+          parent.childName && parent.childName !== "-"
+            ? parent.childName
+            : parentStudentsById.get(childId)?.name || "-"
+
         return {
           ...parent,
-          childName: parentStudentsById.get(childId)?.name || "-",
+          childId,
+          childName: resolvedName,
         }
       })
 

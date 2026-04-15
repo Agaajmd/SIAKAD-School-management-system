@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
+import { SchoolWalletTopup } from "@/components/organisms/school-wallet-topup"
+import { WalletCard } from "@/components/organisms/wallet-card"
 import type { Student } from "@/lib/data-model"
 import { 
   Wallet, 
@@ -141,6 +143,20 @@ export default function ParentDashboard() {
             </div>
           </div>
         </GlassCard>
+
+        <SchoolWalletTopup
+          role="PARENT"
+          renderTrigger={({ openModal, walletBalance, pendingAmount, isLoading }) => (
+            <WalletCard
+              ownerName={parent.name}
+              secondaryLabel="Akun Orang Tua"
+              walletBalance={walletBalance}
+              pendingAmount={pendingAmount}
+              isLoading={isLoading}
+              onTopupClick={openModal}
+            />
+          )}
+        />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 gap-3">

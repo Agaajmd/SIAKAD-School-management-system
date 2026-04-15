@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { 
   Search,
   Store,
@@ -19,6 +20,7 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import type { UserRole } from "@/lib/data-model"
 
 type Product = {
   id: string
@@ -41,6 +43,13 @@ type Canteen = {
   totalOrders?: number
 }
 
+type Viewer = {
+  id: string
+  name: string
+  avatar: string
+  role: UserRole
+}
+
 type OrderItem = {
   productId: string
   productName: string
@@ -60,6 +69,7 @@ export default function CanteenPage() {
   const [showCart, setShowCart] = useState(false)
   const [selectedCanteen, setSelectedCanteen] = useState<Canteen | null>(null)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [viewer, setViewer] = useState<Viewer | null>(null)
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250)
 
   const [canteens, setCanteens] = useState<Canteen[]>([])
@@ -73,6 +83,14 @@ export default function CanteenPage() {
         if (!res.ok) return
         const data = await res.json()
         if (!active) return
+        if (data?.viewer?.id && data?.viewer?.role) {
+          setViewer({
+            id: String(data.viewer.id),
+            name: String(data.viewer.name || "User"),
+            avatar: String(data.viewer.avatar || "/placeholder-user.jpg"),
+            role: data.viewer.role as UserRole,
+          })
+        }
         if (Array.isArray(data.canteens)) setCanteens(data.canteens)
         if (Array.isArray(data.products)) setProducts(data.products)
       } catch {
@@ -230,16 +248,18 @@ export default function CanteenPage() {
     [quantityByProduct],
   )
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50/30">
+  const pageContent = (
+    <>
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-lg border-b border-slate-100">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <Link href="/" className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors">
-                <Home className="w-5 h-5 text-slate-600" />
-              </Link>
+              {!viewer ? (
+                <Link href="/" className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors">
+                  <Home className="w-5 h-5 text-slate-600" />
+                </Link>
+              ) : null}
               <div>
                 <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                   <span className="text-2xl">🍽️</span> EduCanteen
@@ -529,6 +549,18 @@ export default function CanteenPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
+
+  if (viewer) {
+    return (
+      <DashboardLayout role={viewer.role} userName={viewer.name} userAvatar={viewer.avatar}>
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50/30 -mx-4 sm:-mx-6 md:-mx-0">
+          {pageContent}
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  return <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50/30">{pageContent}</div>
 }

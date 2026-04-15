@@ -85,12 +85,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tugas tidak ditemukan" }, { status: 404 })
   }
 
-  let normalizedMedia: { attachmentUrl?: string; imageUrl?: string; attachmentName?: string }
+  let normalizedMedia: {
+    attachmentUrl?: string
+    attachmentUrls?: string[]
+    imageUrl?: string
+    imageUrls?: string[]
+    attachmentName?: string
+  }
   try {
     normalizedMedia = await normalizeTaskMedia(
       {
         attachmentUrl: body.attachmentUrl ? String(body.attachmentUrl) : undefined,
+        attachmentUrls: Array.isArray(body.attachmentUrls)
+          ? body.attachmentUrls.map((item: unknown) => String(item || "")).filter(Boolean)
+          : undefined,
         imageUrl: body.imageUrl ? String(body.imageUrl) : undefined,
+        imageUrls: Array.isArray(body.imageUrls)
+          ? body.imageUrls.map((item: unknown) => String(item || "")).filter(Boolean)
+          : undefined,
         attachmentName: body.attachmentName ? String(body.attachmentName) : undefined,
       },
       { taskId: `submission-${taskId}-${studentId}` },
@@ -111,7 +123,9 @@ export async function POST(request: Request) {
     studentId,
     submittedAt: new Date().toISOString(),
     attachmentUrl: normalizedMedia.attachmentUrl,
+    attachmentUrls: normalizedMedia.attachmentUrls,
     imageUrl: normalizedMedia.imageUrl,
+    imageUrls: normalizedMedia.imageUrls,
     attachmentName: normalizedMedia.attachmentName,
     status: "SUBMITTED" as const,
     score: existing?.score,
