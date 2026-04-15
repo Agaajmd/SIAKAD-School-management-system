@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { createDbClass, getAllDbClasses } from "@/lib/server/google-sheets-classes"
+import { getAllDbAttendanceRecords } from "@/lib/server/google-sheets-attendance"
 import { getSessionUser } from "@/lib/server/session-user"
-import { getDbAdmins, getDbClasses, getDbStudents, setDbClasses } from "@/lib/server/data-store"
+import { getDbAdmins, getDbAttendance, getDbClasses, getDbStudents, setDbAttendance, setDbClasses } from "@/lib/server/data-store"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
+import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
 import { logAudit } from "@/lib/server/audit-log"
 
 export async function GET() {
@@ -39,14 +42,7 @@ export async function GET() {
     getDbAdmins()[0] ||
     null
 
-  const classIdSet = new Set(classesFromSheet.map((item) => item.id))
-  const classNameToId = new Map(classesFromSheet.map((item) => [item.name.trim().toLowerCase(), item.id]))
-  const resolveClassId = (rawClassId: string | undefined) => {
-    const value = String(rawClassId || "").trim()
-    if (!value) return ""
-    if (classIdSet.has(value)) return value
-    return classNameToId.get(value.toLowerCase()) || value
-  }
+  const { resolveClassId } = createClassIdResolver(classesFromSheet)
 
   const studentsFromStore = getDbStudents()
   const studentsFromUsers = users
@@ -84,7 +80,39 @@ export async function GET() {
       avatar: fromUsers?.avatar || student.avatar,
     })
   }
-  const students = [...studentMap.values()]
+
+  let attendanceRecords = getDbAttendance()
+  try {
+    attendanceRecords = await getAllDbAttendanceRecords()
+    setDbAttendance(attendanceRecords)
+  } catch {
+    // Fallback to in-memory attendance cache.
+  }
+
+  const latestAttendanceByStudent = new Map<string, { date: string; status: "PRESENT" | "SICK" | "ALPHA" }>()
+  for (const record of attendanceRecords) {
+    const existing = latestAttendanceByStudent.get(record.studentId)
+    if (!existing || record.date >= existing.date) {
+      latestAttendanceByStudent.set(record.studentId, {
+        date: record.date,
+        status: record.status,
+      })
+    }
+  }
+
+  for (const [studentId, latest] of latestAttendanceByStudent.entries()) {
+    const current = studentMap.get(studentId)
+    if (!current) continue
+    studentMap.set(studentId, {
+      ...current,
+      attendance: latest.status,
+    })
+  }
+
+  const students = assignStudentSeatsToClasses(classesFromSheet, [...studentMap.values()].map((student) => ({
+    ...student,
+    classId: resolveClassId(student.classId),
+  })))
 
   setDbClasses(classesFromSheet)
 

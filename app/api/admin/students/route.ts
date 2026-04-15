@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createDbUser } from "@/lib/server/google-sheets-auth"
+import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -34,13 +36,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
   }
 
+  const classes = await getAllDbClasses()
+  const { resolveClassId } = createClassIdResolver(classes)
+  const normalizedClassId = resolveClassId(classId)
+  if (!normalizedClassId || !classes.some((item) => item.id === normalizedClassId)) {
+    return NextResponse.json({ error: "Kelas tidak ditemukan" }, { status: 404 })
+  }
+
   const authUser = await createDbUser({
     name,
     email,
     password,
     phone,
     role: "STUDENT",
-    classId,
+    classId: normalizedClassId,
     avatar: "/placeholder-user.jpg",
   })
 
@@ -51,7 +60,7 @@ export async function POST(request: Request) {
     phone: authUser.phone,
     avatar: authUser.avatar,
     role: "STUDENT" as const,
-    classId,
+    classId: normalizedClassId,
     paymentStatus: "UNPAID" as const,
     behaviorScore: 100,
     attendance: "PRESENT" as const,

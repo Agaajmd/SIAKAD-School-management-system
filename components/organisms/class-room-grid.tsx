@@ -14,9 +14,17 @@ interface ClassRoomGridProps {
   onAttendanceChange?: (studentId: string, status: AttendanceStatus) => void
   viewOnly?: boolean
   highlightStudentId?: string
+  lockUnpaidSeats?: boolean
 }
 
-export const ClassRoomGrid = ({ classroom, students, onAttendanceChange, viewOnly = false, highlightStudentId }: ClassRoomGridProps) => {
+export const ClassRoomGrid = ({
+  classroom,
+  students,
+  onAttendanceChange,
+  viewOnly = false,
+  highlightStudentId,
+  lockUnpaidSeats = true,
+}: ClassRoomGridProps) => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
 
   const getStudentAtSeat = (row: number, col: number): Student | undefined => {
@@ -47,7 +55,7 @@ export const ClassRoomGrid = ({ classroom, students, onAttendanceChange, viewOnl
 
   const handleSeatClick = (student: Student) => {
     if (viewOnly) return
-    if (student.paymentStatus === "UNPAID") return
+    if (lockUnpaidSeats && student.paymentStatus === "UNPAID") return
     setSelectedStudent(student)
   }
 
@@ -89,45 +97,16 @@ export const ClassRoomGrid = ({ classroom, students, onAttendanceChange, viewOnl
           </div>
         </div>
 
-        {/* Seats Grid - 6 columns with 2-2-2 pattern */}
+        {/* Seats Grid - follows class rows/cols, with aisle every 2 seats */}
         <div className="space-y-4">
           {Array.from({ length: classroom.rows }).map((_, rowIndex) => (
             <div key={rowIndex} className="flex justify-center gap-2 sm:gap-3">
-              {/* First pair of seats */}
-              {[0, 1].map((colOffset) => {
-                const colIndex = colOffset
+              {Array.from({ length: classroom.cols }).map((_, colIndex) => {
                 const student = getStudentAtSeat(rowIndex, colIndex)
+                const hasAisleAfter = colIndex < classroom.cols - 1 && (colIndex + 1) % 2 === 0
                 return (
-                  <div key={`${rowIndex}-${colIndex}`} className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">
-                    {renderSeat(student, rowIndex, colIndex)}
-                  </div>
-                )
-              })}
-              
-              {/* Gap */}
-              <div className="w-4 sm:w-6 md:w-8" />
-              
-              {/* Second pair of seats */}
-              {[2, 3].map((colOffset) => {
-                const colIndex = colOffset
-                const student = getStudentAtSeat(rowIndex, colIndex)
-                return (
-                  <div key={`${rowIndex}-${colIndex}`} className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">
-                    {renderSeat(student, rowIndex, colIndex)}
-                  </div>
-                )
-              })}
-              
-              {/* Gap */}
-              <div className="w-4 sm:w-6 md:w-8" />
-              
-              {/* Third pair of seats */}
-              {[4, 5].map((colOffset) => {
-                const colIndex = colOffset
-                const student = getStudentAtSeat(rowIndex, colIndex)
-                return (
-                  <div key={`${rowIndex}-${colIndex}`} className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">
-                    {renderSeat(student, rowIndex, colIndex)}
+                  <div key={`${rowIndex}-${colIndex}`} className={cn("flex items-center", hasAisleAfter && "mr-4 sm:mr-6 md:mr-8")}>
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">{renderSeat(student, rowIndex, colIndex)}</div>
                   </div>
                 )
               })}
@@ -201,13 +180,13 @@ export const ClassRoomGrid = ({ classroom, students, onAttendanceChange, viewOnl
   function renderSeat(student: Student | undefined, rowIndex: number, colIndex: number) {
     if (!student) {
       return (
-        <div className="w-full h-full flex items-center justify-center bg-slate-100 border border-slate-200 rounded-xl sm:rounded-2xl transition-all duration-300 hover:bg-slate-150">
+        <div className="w-full h-full flex items-center justify-center bg-slate-100/90 border border-slate-200 rounded-xl sm:rounded-2xl opacity-60 cursor-not-allowed" aria-disabled="true" title="Kursi kosong">
           <Armchair className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
         </div>
       )
     }
 
-    const isLocked = student.paymentStatus === "UNPAID"
+    const isLocked = lockUnpaidSeats && student.paymentStatus === "UNPAID"
     const isHighlighted = highlightStudentId === student.id
 
     return (

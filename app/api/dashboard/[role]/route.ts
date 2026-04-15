@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
+import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbCanteens } from "@/lib/server/google-sheets-canteens"
 import { getSessionUser } from "@/lib/server/session-user"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
+import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
 import {
   getDbActivityPoints,
   getDbAdmins,
@@ -15,7 +19,6 @@ import {
   getDbParents,
   getDbPayments,
   getDbProducts,
-  getDbSchedules,
   getDbStudentReports,
   getDbStudents,
   getDbSuperAdmins,
@@ -24,27 +27,87 @@ import {
   setDbCanteens,
 } from "@/lib/server/data-store"
 
+const normalizeId = (value: unknown) => String(value || "").trim().toLowerCase()
+
+const sameId = (left: unknown, right: unknown) => {
+  const normalizedLeft = normalizeId(left)
+  const normalizedRight = normalizeId(right)
+  return Boolean(normalizedLeft) && normalizedLeft === normalizedRight
+}
+
+const normalizeDay = (value: unknown) => String(value || "").trim().toLowerCase()
+
+const DAY_ALIASES: Record<string, string[]> = {
+  monday: ["senin", "mon", "sen"],
+  tuesday: ["selasa", "tue", "sel"],
+  wednesday: ["rabu", "wed", "rab"],
+  thursday: ["kamis", "thu", "kam"],
+  friday: ["jumat", "jum'at", "fri", "jum"],
+  saturday: ["sabtu", "sat", "sab"],
+  sunday: ["minggu", "sun", "min"],
+}
+
+const getTodayDayKeys = () => {
+  const todayEnglish = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()).toLowerCase()
+  const aliases = DAY_ALIASES[todayEnglish] || []
+  return new Set([todayEnglish, ...aliases].map((item) => normalizeDay(item)).filter(Boolean))
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ role: string }> }) {
   const { role } = await params
   const url = new URL(request.url)
   const users = await getAllDbUsers()
+  const [classesFromSheet, schedulesFromSheet] = await Promise.all([getAllDbClasses(), getAllDbSchedules()])
+  const { resolveClassId } = createClassIdResolver(classesFromSheet)
   const sessionUser = await getSessionUser()
 
   switch (role) {
     case "student": {
+      const mergedStudents = (() => {
+        const sheetStudents = users
+          .filter((user) => user.role === "STUDENT" && user.isActive)
+          .map((user) => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            avatar: user.avatar,
+            role: "STUDENT" as const,
+            classId: resolveClassId(user.classId),
+            paymentStatus: "UNPAID" as const,
+            behaviorScore: 100,
+            attendance: "PRESENT" as const,
+            seatRow: Number((user as any).seatRow ?? 0),
+            seatCol: Number((user as any).seatCol ?? 0),
+            coins: 0,
+            streak: Number((user as any).streak ?? 0),
+            level: Number((user as any).level ?? 1),
+            xp: Number((user as any).xp ?? 0),
+          }))
+        const storeStudents = getDbStudents().map((student) => ({ ...student, classId: resolveClassId(student.classId) }))
+        const studentMap = new Map<string, (typeof storeStudents)[number]>()
+        for (const student of storeStudents) studentMap.set(student.id, student)
+        for (const student of sheetStudents) studentMap.set(student.id, { ...(studentMap.get(student.id) || student), ...student })
+        return [...studentMap.values()]
+      })()
+
       const student =
-        (sessionUser?.role === "STUDENT" ? users.find((user) => user.id === sessionUser.id && user.isActive) : null) ||
-        users.find((user) => user.role === "STUDENT" && user.isActive) ||
+        (sessionUser?.role === "STUDENT" ? mergedStudents.find((user) => user.id === sessionUser.id) : null) ||
+        mergedStudents[0] ||
         null
       if (!student) {
         return NextResponse.json({ error: "Siswa tidak ditemukan" }, { status: 404 })
       }
-      const schedules = getDbSchedules().filter((schedule) => schedule.classId === student.classId)
+      const classId = resolveClassId(student.classId)
+      const schedules = schedulesFromSheet
+        .map((schedule) => ({ ...schedule, classId: resolveClassId(schedule.classId) }))
+        .filter((schedule) => schedule.classId === classId)
       const nextClass = schedules[0] || null
       const teacher = nextClass ? users.find((user) => user.id === nextClass.teacherId) || null : null
-      const studentClass = getDbClasses().find((classRoom) => classRoom.id === student.classId) || null
-      const classmates = users.filter(
-        (user) => user.role === "STUDENT" && user.isActive && user.classId === student.classId,
+      const studentClass = classesFromSheet.find((classRoom) => classRoom.id === classId) || getDbClasses().find((classRoom) => classRoom.id === classId) || null
+      const classmates = assignStudentSeatsToClasses(
+        classesFromSheet,
+        mergedStudents.filter((user) => resolveClassId(user.classId) === classId) as any,
       )
 
       return NextResponse.json({ student, nextClass, teacher, studentClass, classmates })
@@ -59,17 +122,56 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
         return NextResponse.json({ error: "Guru tidak ditemukan" }, { status: 404 })
       }
 
-      const teacherMap = getDbTeachers().find((teacher) => teacher.id === employeeUser.id)
+      const teacherMap = getDbTeachers().find((teacher) => sameId(teacher.id, employeeUser.id))
+      const teacherId = employeeUser.id
+
+      const taughtClassIds = new Set<string>()
+      for (const schedule of schedulesFromSheet) {
+        if (!sameId(schedule.teacherId, teacherId)) continue
+        const normalizedClassId = resolveClassId(schedule.classId)
+        if (normalizedClassId) {
+          taughtClassIds.add(normalizedClassId)
+        }
+      }
+      for (const classRoom of classesFromSheet) {
+        if (sameId(classRoom.teacherId, teacherId)) {
+          taughtClassIds.add(classRoom.id)
+        }
+      }
+      for (const classRoom of getDbClasses()) {
+        if (sameId(classRoom.teacherId, teacherId)) {
+          const normalizedClassId = resolveClassId(classRoom.id)
+          if (normalizedClassId) {
+            taughtClassIds.add(normalizedClassId)
+          }
+        }
+      }
+      for (const task of getDbTasks()) {
+        if (!sameId(task.teacherId, teacherId)) continue
+        const normalizedClassId = resolveClassId(task.classId)
+        if (normalizedClassId) {
+          taughtClassIds.add(normalizedClassId)
+        }
+      }
+
+      const todayDayKeys = getTodayDayKeys()
+      const todayClasses = schedulesFromSheet
+        .filter((schedule) => sameId(schedule.teacherId, teacherId) && todayDayKeys.has(normalizeDay(schedule.day)))
+        .map((schedule) => ({
+          ...schedule,
+          classId: resolveClassId(schedule.classId),
+        }))
+
       const employee = {
         id: employeeUser.id,
         name: employeeUser.name,
         email: employeeUser.email,
         avatar: employeeUser.avatar,
         role: "EMPLOYEE" as const,
-        rating: teacherMap?.rating || 0,
-        classesCount: teacherMap?.classesCount || 0,
+        subject: employeeUser.subject || teacherMap?.subject || "-",
+        rating: Number(teacherMap?.rating || 0),
+        classesCount: Math.max(taughtClassIds.size, Number(teacherMap?.classesCount || 0)),
       }
-      const todayClasses = getDbSchedules().filter((schedule) => schedule.day === "Monday" && schedule.teacherId === employee.id)
       return NextResponse.json({ employee, todayClasses })
     }
 

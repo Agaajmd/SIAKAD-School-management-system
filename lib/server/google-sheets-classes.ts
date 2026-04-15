@@ -6,6 +6,16 @@ import type { ClassRoom } from "@/lib/data-model"
 const CLASSES_SHEET_NAME = "classes"
 const CLASSES_COLUMNS = ["id", "name", "grade", "rows", "cols", "teacher_id", "created_at", "updated_at"]
 
+const CLASSES_CACHE_TTL_MS = 60_000
+const CLASSES_READY_TTL_MS = 5 * 60_000
+
+let classesCache: { expiresAt: number; data: ClassRoom[] } | null = null
+let classesSheetReadyAt = 0
+
+function invalidateClassesCache() {
+  classesCache = null
+}
+
 type ServiceAccount = {
   client_email: string
   private_key: string
@@ -64,7 +74,16 @@ function normalizeClassRow(row: string[]): ClassRoom {
   }
 }
 
+function isQuotaExceededError(error: unknown) {
+  const err = error as { code?: number; status?: number; message?: string }
+  return err?.code === 429 || err?.status === 429 || /quota exceeded/i.test(String(err?.message || ""))
+}
+
 export async function ensureClassesSheetReady() {
+  if (Date.now() - classesSheetReadyAt < CLASSES_READY_TTL_MS) {
+    return
+  }
+
   const sheets = await getSheetsClient()
   const spreadsheetId = getSpreadsheetId()
 
@@ -96,6 +115,7 @@ export async function ensureClassesSheetReady() {
 
   const firstRow = headerRes.data.values?.[0] || []
   if (firstRow.length === CLASSES_COLUMNS.length) {
+    classesSheetReadyAt = Date.now()
     return
   }
 
@@ -107,22 +127,40 @@ export async function ensureClassesSheetReady() {
       values: [CLASSES_COLUMNS],
     },
   })
+
+  classesSheetReadyAt = Date.now()
 }
 
 export async function getAllDbClasses(): Promise<ClassRoom[]> {
-  await ensureClassesSheetReady()
-  const sheets = await getSheetsClient()
-  const spreadsheetId = getSpreadsheetId()
+  if (classesCache && classesCache.expiresAt > Date.now()) {
+    return classesCache.data
+  }
 
-  const rowsRes = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${CLASSES_SHEET_NAME}!A2:H`,
-  })
+  try {
+    await ensureClassesSheetReady()
+    const sheets = await getSheetsClient()
+    const spreadsheetId = getSpreadsheetId()
 
-  const rows = rowsRes.data.values || []
-  return rows
-    .filter((row) => row[0] && row[1])
-    .map((row) => normalizeClassRow(row as string[]))
+    const rowsRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${CLASSES_SHEET_NAME}!A2:H`,
+    })
+
+    const rows = rowsRes.data.values || []
+    const data = rows
+      .filter((row) => row[0] && row[1])
+      .map((row) => normalizeClassRow(row as string[]))
+    classesCache = {
+      expiresAt: Date.now() + CLASSES_CACHE_TTL_MS,
+      data,
+    }
+    return data
+  } catch (error) {
+    if (classesCache?.data?.length && isQuotaExceededError(error)) {
+      return classesCache.data
+    }
+    throw error
+  }
 }
 
 async function getDbClassRowById(id: string): Promise<{ classRoom: ClassRoom; rowNumber: number } | null> {
@@ -177,6 +215,8 @@ export async function createDbClass(input: {
     },
   })
 
+  invalidateClassesCache()
+
   return next
 }
 
@@ -215,6 +255,8 @@ export async function updateDbClassById(input: {
     },
   })
 
+  invalidateClassesCache()
+
   return next
 }
 
@@ -251,4 +293,6 @@ export async function deleteDbClassById(id: string): Promise<void> {
       ],
     },
   })
+
+  invalidateClassesCache()
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { deleteDbUserById, getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { deleteDbClassById, getAllDbClasses, updateDbClassById } from "@/lib/server/google-sheets-classes"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import {
   getDbStudents,
   setDbClasses,
@@ -42,6 +43,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ cl
 export async function DELETE(_: Request, { params }: { params: Promise<{ classId: string }> }) {
   const { classId } = await params
   const classes = await getAllDbClasses()
+  const { resolveClassId } = createClassIdResolver(classes)
+  const normalizedClassId = resolveClassId(classId)
   const target = classes.find((item) => item.id === classId)
   if (!target) {
     return NextResponse.json({ error: "Kelas tidak ditemukan" }, { status: 404 })
@@ -49,13 +52,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ classId
 
   const users = await getAllDbUsers()
   const studentsInClass = users.filter(
-    (user) => user.role === "STUDENT" && user.classId === classId,
+    (user) => user.role === "STUDENT" && resolveClassId(user.classId) === normalizedClassId,
   )
 
   await Promise.all(studentsInClass.map((student) => deleteDbUserById(student.id)))
   await deleteDbClassById(classId)
   setDbClasses(classes.filter((item) => item.id !== classId))
-  setDbStudents(getDbStudents().filter((student) => student.classId !== classId))
+  setDbStudents(getDbStudents().filter((student) => resolveClassId(student.classId) !== normalizedClassId))
   logAudit({
     action: "DELETE",
     entityName: "classes",

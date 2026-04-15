@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { deleteDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -31,6 +33,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
   }
 
+  const nextClassIdRaw = body.classId ? String(body.classId).trim() : undefined
+  let normalizedNextClassId: string | undefined = undefined
+  if (nextClassIdRaw !== undefined) {
+    const classes = await getAllDbClasses()
+    const { resolveClassId } = createClassIdResolver(classes)
+    normalizedNextClassId = resolveClassId(nextClassIdRaw)
+    if (!normalizedNextClassId || !classes.some((item) => item.id === normalizedNextClassId)) {
+      return NextResponse.json({ error: "Kelas tidak ditemukan" }, { status: 404 })
+    }
+  }
+
   const students = getDbStudents()
   const target = students.find((item) => item.id === id)
   const users = await getAllDbUsers()
@@ -54,7 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     phone: nextPhone != null ? nextPhone : (target?.phone || userTarget?.phone),
     avatar: target?.avatar || userTarget?.avatar || "/placeholder-user.jpg",
     role: "STUDENT" as const,
-    classId: body.classId ? String(body.classId) : (target?.classId || userTarget?.classId || ""),
+    classId: normalizedNextClassId ?? (target?.classId || userTarget?.classId || ""),
     paymentStatus: target?.paymentStatus || "UNPAID" as const,
     behaviorScore: target?.behaviorScore ?? 100,
     attendance: target?.attendance || "PRESENT" as const,

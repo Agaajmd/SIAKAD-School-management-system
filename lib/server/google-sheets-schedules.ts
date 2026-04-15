@@ -17,6 +17,16 @@ const SCHEDULES_COLUMNS = [
   "updated_at",
 ]
 
+const SCHEDULES_CACHE_TTL_MS = 60_000
+const SCHEDULES_READY_TTL_MS = 5 * 60_000
+
+let schedulesCache: { expiresAt: number; data: Schedule[] } | null = null
+let schedulesSheetReadyAt = 0
+
+function invalidateSchedulesCache() {
+  schedulesCache = null
+}
+
 type ServiceAccount = {
   client_email: string
   private_key: string
@@ -77,7 +87,16 @@ function normalizeScheduleRow(row: string[]): Schedule {
   }
 }
 
+function isQuotaExceededError(error: unknown) {
+  const err = error as { code?: number; status?: number; message?: string }
+  return err?.code === 429 || err?.status === 429 || /quota exceeded/i.test(String(err?.message || ""))
+}
+
 export async function ensureSchedulesSheetReady() {
+  if (Date.now() - schedulesSheetReadyAt < SCHEDULES_READY_TTL_MS) {
+    return
+  }
+
   const sheets = await getSheetsClient()
   const spreadsheetId = getSpreadsheetId()
 
@@ -109,6 +128,7 @@ export async function ensureSchedulesSheetReady() {
 
   const firstRow = headerRes.data.values?.[0] || []
   if (firstRow.length === SCHEDULES_COLUMNS.length) {
+    schedulesSheetReadyAt = Date.now()
     return
   }
 
@@ -120,22 +140,40 @@ export async function ensureSchedulesSheetReady() {
       values: [SCHEDULES_COLUMNS],
     },
   })
+
+  schedulesSheetReadyAt = Date.now()
 }
 
 export async function getAllDbSchedules(): Promise<Schedule[]> {
-  await ensureSchedulesSheetReady()
-  const sheets = await getSheetsClient()
-  const spreadsheetId = getSpreadsheetId()
+  if (schedulesCache && schedulesCache.expiresAt > Date.now()) {
+    return schedulesCache.data
+  }
 
-  const rowsRes = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${SCHEDULES_SHEET_NAME}!A2:J`,
-  })
+  try {
+    await ensureSchedulesSheetReady()
+    const sheets = await getSheetsClient()
+    const spreadsheetId = getSpreadsheetId()
 
-  const rows = rowsRes.data.values || []
-  return rows
-    .filter((row) => row[0] && row[1] && row[2] && row[3])
-    .map((row) => normalizeScheduleRow(row as string[]))
+    const rowsRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${SCHEDULES_SHEET_NAME}!A2:J`,
+    })
+
+    const rows = rowsRes.data.values || []
+    const data = rows
+      .filter((row) => row[0] && row[1] && row[2] && row[3])
+      .map((row) => normalizeScheduleRow(row as string[]))
+    schedulesCache = {
+      expiresAt: Date.now() + SCHEDULES_CACHE_TTL_MS,
+      data,
+    }
+    return data
+  } catch (error) {
+    if (schedulesCache?.data?.length && isQuotaExceededError(error)) {
+      return schedulesCache.data
+    }
+    throw error
+  }
 }
 
 async function getDbScheduleRowById(id: string): Promise<{ schedule: Schedule; rowNumber: number } | null> {
@@ -205,6 +243,8 @@ export async function createDbSchedule(input: {
     },
   })
 
+  invalidateSchedulesCache()
+
   return next
 }
 
@@ -258,6 +298,8 @@ export async function updateDbScheduleById(input: {
     },
   })
 
+  invalidateSchedulesCache()
+
   return next
 }
 
@@ -294,4 +336,6 @@ export async function deleteDbScheduleById(id: string): Promise<void> {
       ],
     },
   })
+
+  invalidateSchedulesCache()
 }

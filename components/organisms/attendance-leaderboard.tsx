@@ -10,10 +10,15 @@ interface AttendanceLeaderboardProps {
   students?: Student[]
 }
 
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // Calculate attendance score based on streak and attendance status
 const getAttendanceScore = (student: Student) => {
   const baseScore = student.attendance === "PRESENT" ? 100 : student.attendance === "SICK" ? 50 : 0
-  const streakBonus = student.streak * 5
+  const streakBonus = toFiniteNumber(student.streak) * 5
   return baseScore + streakBonus
 }
 
@@ -22,7 +27,7 @@ export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students =
   const sortedStudents = [...students]
     .map(student => ({
       ...student,
-      attendanceScore: getAttendanceScore(student),
+      attendanceScore: toFiniteNumber(getAttendanceScore(student)),
     }))
     .sort((a, b) => b.attendanceScore - a.attendanceScore)
     .slice(0, limit)
@@ -88,7 +93,7 @@ export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students =
               <div className="flex items-center gap-2 text-[10px] text-slate-500">
                 <span className="flex items-center gap-0.5">
                   <Flame className="w-3 h-3 text-orange-500" />
-                  {student.streak} streak
+                  {toFiniteNumber(student.streak)} streak
                 </span>
                 <span>•</span>
                 <span className={`${
@@ -102,7 +107,7 @@ export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students =
 
             {/* Score */}
             <div className="text-right shrink-0">
-              <p className="text-sm font-bold text-slate-800">{student.attendanceScore}</p>
+              <p className="text-sm font-bold text-slate-800">{toFiniteNumber(student.attendanceScore)}</p>
               <p className="text-[10px] text-slate-400">poin</p>
             </div>
           </div>
