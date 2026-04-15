@@ -8,6 +8,8 @@ import { NextClassCard } from "@/components/organisms/next-class-card"
 import { AttendanceLeaderboard } from "@/components/organisms/attendance-leaderboard"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
 import { RouteLoading } from "@/components/templates/route-loading"
+import { GlassCard } from "@/components/molecules/glass-card"
+import { GraduationCap } from "lucide-react"
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<any>(null)
@@ -15,13 +17,15 @@ export default function StudentDashboard() {
   const [teacher, setTeacher] = useState<any>(null)
   const [studentClass, setStudentClass] = useState<any>(null)
   const [classmates, setClassmates] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/student/overview", { cache: "no-store" })
         if (!res.ok) {
-          return
+          throw new Error("Gagal memuat dashboard siswa")
         }
         const data = await res.json()
         setStudent(data.student || null)
@@ -30,15 +34,31 @@ export default function StudentDashboard() {
         setStudentClass(data.studentClass || null)
         setClassmates(Array.isArray(data.classmates) ? data.classmates : [])
       } catch {
-        setStudent(null)
+        setLoadError("Dashboard belum bisa dimuat saat ini.")
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    load()
+    void load()
   }, [])
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto px-1">
+          <GlassCard className="p-8 text-center">
+            <GraduationCap className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-slate-800">Data siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -65,6 +85,8 @@ export default function StudentDashboard() {
               classroom={studentClass} 
               students={classmates} 
               viewOnly={true}
+              allowSeatClickInViewOnly={true}
+              lockUnpaidSeats={false}
             />
           </div>
         )}

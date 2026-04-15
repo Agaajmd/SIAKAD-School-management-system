@@ -8,10 +8,9 @@ import {
   Users, 
   GraduationCap, 
   MapPin, 
-  User,
   Trophy,
-  Flame,
-  Star,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RouteLoading } from "@/components/templates/route-loading"
@@ -46,9 +45,19 @@ export default function StudentClassPage() {
     load()
   }, [])
 
+  const getNetPoints = (target: any) => {
+    const positivePoints = Number(target?.positivePoints ?? 0)
+    const negativePoints = Number(target?.negativePoints ?? 0)
+    const total = target?.totalPoints ?? target?.points
+    if (total != null) {
+      return Number(total)
+    }
+    return positivePoints - negativePoints
+  }
+
   const myRank = useMemo(() => {
     if (!student) return 0
-    return [...classmates].sort((a, b) => b.xp - a.xp).findIndex((s) => s.id === student.id) + 1
+    return [...classmates].sort((a, b) => getNetPoints(b) - getNetPoints(a)).findIndex((s) => s.id === student.id) + 1
   }, [classmates, student])
 
   if (isLoading) {
@@ -100,9 +109,9 @@ export default function StudentClassPage() {
   const sickCount = classmates.filter(s => s.attendance === "SICK").length
   const alphaCount = classmates.filter(s => s.attendance === "ALPHA").length
   
-  // Top students by level/XP
+  // Top students by total points
   const topStudents = [...classmates]
-    .sort((a, b) => b.xp - a.xp)
+    .sort((a, b) => getNetPoints(b) - getNetPoints(a))
     .slice(0, 5)
   
   return (
@@ -186,6 +195,8 @@ export default function StudentClassPage() {
             classroom={resolvedStudentClass} 
             students={classmates} 
             viewOnly={true}
+            allowSeatClickInViewOnly={true}
+            lockUnpaidSeats={false}
             highlightStudentId={student.id}
           />
         </div>
@@ -194,7 +205,7 @@ export default function StudentClassPage() {
         <GlassCard className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-5 h-5 text-amber-500" />
-            <h2 className="text-lg font-semibold text-slate-800">Top 5 Siswa</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Top 5 Poin Siswa</h2>
           </div>
           <div className="space-y-3">
             {topStudents.map((s, idx) => (
@@ -230,18 +241,18 @@ export default function StudentClassPage() {
                   </p>
                   <div className="flex items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-500" />
-                      Lv.{s.level}
+                      <TrendingUp className="w-3 h-3 text-emerald-500" />
+                      +{Number(s.positivePoints ?? 0)}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Flame className="w-3 h-3 text-orange-500" />
-                      {s.streak} hari
+                      <TrendingDown className="w-3 h-3 text-rose-500" />
+                      -{Number(s.negativePoints ?? 0)}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-slate-800">{s.xp.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">XP</p>
+                  <p className="text-sm font-bold text-slate-800">{getNetPoints(s).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">Total Poin</p>
                 </div>
               </div>
             ))}

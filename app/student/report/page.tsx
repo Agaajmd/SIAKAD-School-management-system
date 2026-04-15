@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { GlassTextarea } from "@/components/atoms/glass-textarea"
@@ -34,28 +33,39 @@ export default function StudentReportPage() {
   const [reports, setReports] = useState<any[]>([])
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const successTimerRef = useRef<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const load = async () => {
       try {
         const overviewRes = await fetch("/api/student/overview", { cache: "no-store" })
-        if (!overviewRes.ok) return
+        if (!overviewRes.ok) {
+          throw new Error("Gagal memuat data siswa")
+        }
         const overview = await overviewRes.json()
-        if (!overview.student?.id) return
+        if (!overview.student?.id) {
+          throw new Error("Data siswa tidak ditemukan")
+        }
         setStudent(overview.student)
 
         const reportsRes = await fetch(`/api/student/reports?studentId=${overview.student.id}`, {
           cache: "no-store",
         })
-        if (!reportsRes.ok) return
-        const reportsData = await reportsRes.json()
-        setReports(Array.isArray(reportsData.reports) ? reportsData.reports : [])
+        if (reportsRes.ok) {
+          const reportsData = await reportsRes.json()
+          setReports(Array.isArray(reportsData.reports) ? reportsData.reports : [])
+        } else {
+          setReports([])
+        }
       } catch {
-        setStudent(null)
+        setLoadError("Data laporan aset belum bisa dimuat.")
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    load()
+    void load()
   }, [])
 
   useEffect(() => {
@@ -171,8 +181,21 @@ export default function StudentReportPage() {
     })
   }
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-md mx-auto">
+          <GlassCard className="p-8 text-center">
+            <h2 className="text-lg font-semibold text-slate-800">Data siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -313,8 +336,10 @@ export default function StudentReportPage() {
         {activeTab === "history" && (
           <div className="space-y-3">
             {reports.length === 0 ? (
-              <GlassCard>
-                <EmptySkeleton rows={3} className="py-4" />
+              <GlassCard className="p-6 text-center space-y-2">
+                <Package className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm text-slate-500">Belum ada laporan aset</p>
+                <p className="text-xs text-slate-400">Silakan kirim laporan pertama melalui tab Buat Laporan.</p>
               </GlassCard>
             ) : (
               reports.map((report) => (

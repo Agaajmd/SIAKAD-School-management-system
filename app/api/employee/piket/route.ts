@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { PiketSchedule } from "@/lib/data-model"
 import { getSessionUser } from "@/lib/server/session-user"
-import { getDbPiketSchedules, setDbPiketSchedules } from "@/lib/server/data-store"
+import { getDbPiketSchedules, setDbPiketSchedules } from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 
 async function resolveActorId() {

@@ -4,7 +4,7 @@ import {
   getAllDbCanteens,
   updateDbCanteenByOwnerId,
 } from "@/lib/server/google-sheets-canteens"
-import { getDbCanteenOwners, setDbCanteenOwners, setDbCanteens } from "@/lib/server/data-store"
+import { getDbCanteenOwners, setDbCanteenOwners, setDbCanteens } from "@/lib/server/persistent-store"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)

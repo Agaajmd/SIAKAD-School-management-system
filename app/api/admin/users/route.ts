@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { deleteDbUserById, getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
 import { getSessionUser } from "@/lib/server/session-user"
 import {
   getDbAdmins,
@@ -16,22 +17,62 @@ import {
   setDbStudents,
   setDbSuperAdmins,
   setDbTeachers,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 
 export async function GET() {
   const sessionUser = await getSessionUser()
   const users = await getAllDbUsers()
+  const studentsFromStore = getDbStudents()
+  const studentsById = new Map(studentsFromStore.map((student) => [student.id, student]))
+
+  let activityPoints = [] as Awaited<ReturnType<typeof getAllDbActivityPointsFromSheet>>
+  try {
+    activityPoints = await getAllDbActivityPointsFromSheet()
+  } catch {
+    activityPoints = []
+  }
+
+  const pointSummaryByStudentId = activityPoints.reduce((acc, point) => {
+    const bucket = acc[point.studentId] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+    if (point.type === "NEGATIVE") {
+      bucket.negativePoints += Math.abs(Number(point.points) || 0)
+    } else {
+      bucket.positivePoints += Math.abs(Number(point.points) || 0)
+    }
+    bucket.totalPoints = bucket.positivePoints - bucket.negativePoints
+    acc[point.studentId] = bucket
+    return acc
+  }, {} as Record<string, { positivePoints: number; negativePoints: number; totalPoints: number }>)
+
   const visibleUsers = users
     .filter((user) => (sessionUser?.id ? user.id !== sessionUser.id : true))
-    .map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      avatar: user.avatar,
-      role: user.role,
-      classId: user.classId || null,
-      isActive: user.isActive,
-    }))
+    .map((user) => {
+      const baseUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role,
+        classId: user.classId || null,
+        isActive: user.isActive,
+      }
+
+      if (user.role !== "STUDENT") {
+        return baseUser
+      }
+
+      const summary = pointSummaryByStudentId[user.id] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+      const storedStudent = studentsById.get(user.id)
+
+      return {
+        ...baseUser,
+        paymentStatus: storedStudent?.paymentStatus || "UNPAID",
+        positivePoints: summary.positivePoints,
+        negativePoints: summary.negativePoints,
+        totalPoints: summary.totalPoints,
+        points: summary.totalPoints,
+      }
+    })
 
   return NextResponse.json({ users: visibleUsers })
 }

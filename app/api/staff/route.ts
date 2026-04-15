@@ -8,7 +8,7 @@ import {
   getDbTeachers,
   setDbAdmins,
   setDbTeachers,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 import { getSessionUser } from "@/lib/server/session-user"
 

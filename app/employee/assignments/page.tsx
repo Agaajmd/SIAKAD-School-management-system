@@ -65,10 +65,16 @@ const fileToDataUrl = (file: File) =>
 export default function EmployeeAssignmentsPage() {
   const [employee, setEmployee] = useState({ id: "", subject: "-" })
   const [classes, setClasses] = useState<Array<{ id: string; name: string; grade?: string }>>([])
+  const [studentsById, setStudentsById] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState<TabType>("active")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [selectedSubmission, setSelectedSubmission] = useState<TaskSubmission | null>(null)
+  const [reviewScore, setReviewScore] = useState<number>(0)
+  const [reviewFeedback, setReviewFeedback] = useState("")
+  const [isReviewSaving, setIsReviewSaving] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
@@ -93,70 +99,35 @@ export default function EmployeeAssignmentsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        let teacherId = ""
-        let resolvedClasses: Array<{ id: string; name: string; grade?: string }> = []
-        const classLookup = new Map<string, { id: string; name: string; grade?: string }>()
-
-        const [contextRes, adminClassesRes] = await Promise.all([
-          fetch("/api/employee/context", { cache: "no-store" }),
-          fetch("/api/admin/classes", { cache: "no-store" }),
-        ])
-
-        if (adminClassesRes.ok) {
-          const adminClassesData = await adminClassesRes.json()
-          const allClasses = Array.isArray(adminClassesData.classes)
-            ? adminClassesData.classes.map((item: any) => ({
-                id: String(item.id || "").trim(),
-                name: String(item.name || item.id || "-").trim(),
-                grade: item.grade ? String(item.grade) : undefined,
-              })).filter((item: any) => item.id)
-            : []
-          for (const classRoom of allClasses) {
-            classLookup.set(classRoom.id, classRoom)
-          }
-          resolvedClasses = allClasses
-        }
-
-        if (contextRes.ok) {
-          const contextData = await contextRes.json()
-          const nextEmployee = contextData.employee || { id: "", subject: "-" }
-          teacherId = nextEmployee.id || ""
-
-          const contextClasses = Array.isArray(contextData.classes)
-            ? contextData.classes.map((item: any) => {
-                const id = String(item.id || "").trim()
-                const fromLookup = classLookup.get(id)
-                return {
-                  id,
-                  name: String(item.name || fromLookup?.name || id || "-").trim(),
-                  grade: item.grade ? String(item.grade) : fromLookup?.grade,
-                }
-              }).filter((item: any) => item.id)
-            : []
-
-          if (contextClasses.length > 0) {
-            resolvedClasses = contextClasses
-          }
-
-          setEmployee(nextEmployee)
-          setClasses(resolvedClasses)
-          setFormData((prev) => ({
-            ...prev,
-            subject: nextEmployee.subject || "-",
-            classId: prev.classId || resolvedClasses[0]?.id || "",
-          }))
-        }
-
-        const res = await fetch(`/api/employee/tasks?teacherId=${teacherId}`, { cache: "no-store" })
+        const res = await fetch("/api/employee/tasks", { cache: "no-store" })
         if (!res.ok) throw new Error("Gagal memuat tugas")
         const data = await res.json()
+
+        const nextEmployee = data.employee || { id: "", subject: "-" }
+        const resolvedClasses: Array<{ id: string; name: string; grade?: string }> = Array.isArray(data.classes)
+          ? data.classes.map((item: any) => ({
+              id: String(item.id || "").trim(),
+              name: String(item.name || item.id || "-").trim(),
+              grade: item.grade ? String(item.grade) : undefined,
+            })).filter((item: any) => item.id)
+          : []
+
+        setEmployee(nextEmployee)
+        setClasses(resolvedClasses)
+        setFormData((prev) => ({
+          ...prev,
+          subject: nextEmployee.subject || "-",
+          classId: prev.classId || resolvedClasses[0]?.id || "",
+        }))
+
         setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
         setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+        setStudentsById(data.studentsById && typeof data.studentsById === "object" ? data.studentsById : {})
         if (resolvedClasses.length === 0 && Array.isArray(data.tasks)) {
-          const classOptions = Array.from(new Set((data.tasks as Task[]).map((task) => task.classId).filter(Boolean))).map((id) => {
-            const fromLookup = classLookup.get(id)
-            return fromLookup || { id, name: id }
-          })
+          const classOptions = Array.from(new Set((data.tasks as Task[]).map((task) => task.classId).filter(Boolean))).map((id) => ({
+            id,
+            name: id,
+          }))
           if (classOptions.length > 0) {
             setClasses(classOptions)
             setFormData((prev) => ({ ...prev, classId: prev.classId || classOptions[0].id }))
@@ -172,10 +143,7 @@ export default function EmployeeAssignmentsPage() {
     load()
   }, [])
 
-  const teacherTasks = useMemo(
-    () => (employee.id ? allTasks.filter((task) => task.teacherId === employee.id) : allTasks),
-    [allTasks, employee.id],
-  )
+  const teacherTasks = useMemo(() => allTasks, [allTasks])
 
   const now = new Date()
   const activeTasks = teacherTasks.filter((t) => new Date(t.dueDate) >= now)
@@ -197,7 +165,8 @@ export default function EmployeeAssignmentsPage() {
     const total = 30
     const submitted = submissions.filter((s) => s.status !== "PENDING").length
     const graded = submissions.filter((s) => s.status === "GRADED").length
-    return { submitted, graded, total }
+    const pendingReview = Math.max(0, submitted - graded)
+    return { submitted, graded, total, pendingReview }
   }
 
   const resetForm = () => {
@@ -340,6 +309,66 @@ export default function EmployeeAssignmentsPage() {
   const handleViewSubmissions = (task: Task) => {
     setSelectedTask(task)
     setShowDetailModal(true)
+    void (async () => {
+      try {
+        const res = await fetch(`/api/employee/task-submissions?taskId=${task.id}`, { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.submissions)) {
+          setAllSubmissions((prev) => {
+            const remaining = prev.filter((item) => item.taskId !== task.id)
+            return [...data.submissions, ...remaining]
+          })
+        }
+        if (data.studentsById && typeof data.studentsById === "object") {
+          setStudentsById((prev) => ({ ...prev, ...data.studentsById }))
+        }
+      } catch {
+        // Keep existing local list when refresh fails.
+      }
+    })()
+  }
+
+  const openReviewModal = (submission: TaskSubmission) => {
+    setSelectedSubmission(submission)
+    setReviewScore(Number(submission.score ?? 0))
+    setReviewFeedback(submission.feedback || "")
+    setShowReviewModal(true)
+  }
+
+  const handleSaveReview = async () => {
+    if (!selectedTask || !selectedSubmission) return
+    if (!Number.isFinite(reviewScore)) {
+      toast.error("Nilai harus berupa angka")
+      return
+    }
+
+    setIsReviewSaving(true)
+    try {
+      const res = await fetch("/api/employee/task-submissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: selectedSubmission.id,
+          score: reviewScore,
+          feedback: reviewFeedback,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal menyimpan nilai")
+      }
+
+      const nextSubmission = data.submission as TaskSubmission
+      setAllSubmissions((prev) => prev.map((item) => (item.id === nextSubmission.id ? nextSubmission : item)))
+      toast.success("Penilaian berhasil disimpan")
+      setShowReviewModal(false)
+      setSelectedSubmission(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menyimpan nilai")
+    } finally {
+      setIsReviewSaving(false)
+    }
   }
 
   const tabs = [
@@ -387,10 +416,14 @@ export default function EmployeeAssignmentsPage() {
             </GlassCard>
           ) : getTaskList().length === 0 ? (
             <GlassCard className="p-6 text-center space-y-2">
-              <p className="text-sm text-slate-500">Data tugas belum tersedia</p>
-              <GlassButton type="button" variant="outline" size="sm" onClick={openCreateModal} className="mt-3">
-                <Plus className="w-4 h-4 mr-1" /> Buat Tugas Pertama
-              </GlassButton>
+              <p className="text-sm text-slate-500">
+                {activeTab === "active" ? "Data tugas belum tersedia" : "Belum ada tugas selesai"}
+              </p>
+              {activeTab === "active" ? (
+                <GlassButton type="button" variant="outline" size="sm" onClick={openCreateModal} className="mt-3">
+                  <Plus className="w-4 h-4 mr-1" /> Buat Tugas Pertama
+                </GlassButton>
+              ) : null}
             </GlassCard>
           ) : (
             getTaskList().map((task) => {
@@ -412,6 +445,7 @@ export default function EmployeeAssignmentsPage() {
                         <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(task.dueDate)}</span>
                         <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{stats.submitted}/{stats.total} dikumpulkan</span>
                         <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{stats.graded} dinilai</span>
+                        <span className="flex items-center gap-1 text-amber-500"><FileText className="w-3.5 h-3.5" />{stats.pendingReview} perlu review</span>
                       </div>
 
                       {(task.attachmentUrl || task.imageUrl) && (
@@ -430,7 +464,7 @@ export default function EmployeeAssignmentsPage() {
                       )}
 
                       <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                        <button onClick={() => handleViewSubmissions(task)} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors sm:w-auto sm:justify-start"><Eye className="w-3.5 h-3.5" /> Lihat Submission</button>
+                        <button onClick={() => handleViewSubmissions(task)} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors sm:w-auto sm:justify-start"><Eye className="w-3.5 h-3.5" /> Review Submission</button>
                         <button onClick={() => handleEdit(task)} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors sm:w-auto sm:justify-start"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
                         <button onClick={() => handleDelete(task)} disabled={isSubmitting} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-60 sm:w-auto sm:justify-start">{isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus</button>
                       </div>
@@ -498,7 +532,7 @@ export default function EmployeeAssignmentsPage() {
         </div>
       </GlassModal>
 
-      <GlassModal isOpen={showDetailModal && !!selectedTask} onClose={() => setShowDetailModal(false)} title="Submission" size="lg">
+      <GlassModal isOpen={showDetailModal && !!selectedTask} onClose={() => setShowDetailModal(false)} title="Review Submission" size="lg">
         {selectedTask && (
           <div className="space-y-4">
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -509,32 +543,94 @@ export default function EmployeeAssignmentsPage() {
               {(() => {
                 const submissions = allSubmissions.filter((s) => s.taskId === selectedTask.id)
                 if (submissions.length === 0) {
-                  return <EmptySkeleton rows={2} className="py-4" />
+                  return (
+                    <GlassCard className="p-4 text-center space-y-1">
+                      <p className="text-sm font-medium text-slate-700">Belum ada submission</p>
+                      <p className="text-xs text-slate-500">Submission siswa akan muncul di sini untuk direview.</p>
+                    </GlassCard>
+                  )
                 }
                 return submissions.map((sub) => (
                   <div key={sub.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
                     <div className="flex items-center gap-3">
                       <img src="/placeholder-user.jpg" alt="Student" className="w-10 h-10 rounded-full" />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 text-sm">Siswa {sub.studentId}</p>
+                        <p className="font-medium text-slate-800 text-sm">{studentsById[sub.studentId] || `Siswa ${sub.studentId}`}</p>
                         <p className="text-xs text-slate-500">{formatDate(sub.submittedAt)}</p>
                       </div>
                       {sub.status === "GRADED" ? (
                         <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg">{sub.score}/{selectedTask.maxScore}</span>
                       ) : (
-                        <button className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors">Nilai</button>
+                        <button onClick={() => openReviewModal(sub)} className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors">Nilai</button>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {sub.attachmentUrl && <a href={sub.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100"><Link2 className="w-3.5 h-3.5" />{sub.attachmentName || "File/Link Jawaban"}</a>}
                       {sub.imageUrl && <a href={sub.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200"><ImageIcon className="w-3.5 h-3.5" />Gambar Jawaban</a>}
                     </div>
+                    {sub.feedback ? (
+                      <div className="text-xs text-slate-600 bg-white border border-slate-200 rounded-lg p-2">
+                        <span className="font-medium">Catatan:</span> {sub.feedback}
+                      </div>
+                    ) : null}
                   </div>
                 ))
               })()}
             </div>
           </div>
         )}
+      </GlassModal>
+
+      <GlassModal isOpen={showReviewModal && !!selectedSubmission && !!selectedTask} onClose={() => setShowReviewModal(false)} title="Review Submission" size="md">
+        {selectedSubmission && selectedTask ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-medium text-slate-800">{studentsById[selectedSubmission.studentId] || selectedSubmission.studentId}</p>
+              <p className="text-xs text-slate-500 mt-1">Dikumpulkan: {formatDate(selectedSubmission.submittedAt)}</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Nilai (0 - {selectedTask.maxScore})</label>
+              <input
+                type="number"
+                min={0}
+                max={selectedTask.maxScore}
+                value={reviewScore}
+                onChange={(e) => setReviewScore(Number(e.target.value))}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Feedback (Opsional)</label>
+              <textarea
+                value={reviewFeedback}
+                onChange={(e) => setReviewFeedback(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[90px] resize-none"
+                placeholder="Tambahkan catatan untuk siswa"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setShowReviewModal(false)}
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleSaveReview() }}
+                disabled={isReviewSaving}
+                className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isReviewSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Simpan Nilai
+              </button>
+            </div>
+          </div>
+        ) : null}
       </GlassModal>
     </>
   )

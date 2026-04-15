@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { deleteDbUserById, updateDbUserById } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
-import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
+import { getDbStudents, setDbStudents } from "@/lib/server/persistent-store"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -69,13 +69,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     role: "STUDENT" as const,
     classId: normalizedNextClassId ?? (target?.classId || userTarget?.classId || ""),
     paymentStatus: target?.paymentStatus || "UNPAID" as const,
-    behaviorScore: target?.behaviorScore ?? 100,
+    behaviorScore: target?.behaviorScore ?? 0,
     attendance: target?.attendance || "PRESENT" as const,
     seatRow: target?.seatRow ?? 0,
     seatCol: target?.seatCol ?? 0,
     coins: target?.coins ?? 0,
     streak: target?.streak ?? 0,
-    level: target?.level ?? 1,
+    level: target?.level ?? 0,
     xp: target?.xp ?? 0,
   }
 

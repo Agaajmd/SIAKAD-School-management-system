@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createDbUser } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
-import { getDbStudents, setDbStudents } from "@/lib/server/data-store"
+import { getDbStudents, setDbStudents } from "@/lib/server/persistent-store"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -62,13 +62,13 @@ export async function POST(request: Request) {
     role: "STUDENT" as const,
     classId: normalizedClassId,
     paymentStatus: "UNPAID" as const,
-    behaviorScore: 100,
+    behaviorScore: 0,
     attendance: "PRESENT" as const,
     seatRow: 0,
     seatCol: 0,
     coins: 0,
     streak: 0,
-    level: 1,
+    level: 0,
     xp: 0,
   }
 

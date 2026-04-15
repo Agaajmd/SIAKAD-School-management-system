@@ -3,7 +3,7 @@ import {
   getDbStudentReports,
   setDbStudentReports,
   type StudentReport,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {

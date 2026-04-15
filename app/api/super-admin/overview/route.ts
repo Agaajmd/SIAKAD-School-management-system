@@ -11,7 +11,7 @@ import {
   getDbSuperAdmins,
   getDbTasks,
   getDbTeachers,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 
 export async function GET() {
   const users = await getAllDbUsers()

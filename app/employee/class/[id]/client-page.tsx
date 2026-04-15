@@ -30,11 +30,11 @@ type Student = {
   attendance?: "PRESENT" | "SICK" | "ALPHA"
   seatRow?: number
   seatCol?: number
-  behaviorScore?: number
   paymentStatus?: "PAID" | "UNPAID"
-  streak?: number
-  level?: number
-  xp?: number
+  positivePoints?: number
+  negativePoints?: number
+  totalPoints?: number
+  points?: number
 }
 
 type ClassRoom = {
@@ -71,6 +71,9 @@ type GridStudent = {
   streak: number
   level: number
   xp: number
+  positivePoints: number
+  negativePoints: number
+  totalPoints: number
   parentId: string
   seatRow: number
   seatCol: number
@@ -228,13 +231,16 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
         avatar: student.avatar || "/placeholder-user.jpg",
         classId: student.classId,
         paymentStatus: student.paymentStatus || "PAID",
-        behaviorScore: Number(student.behaviorScore ?? 0),
+        behaviorScore: 0,
         attendance: student.attendance || "PRESENT",
-        points: 0,
+        points: Number(student.points ?? student.totalPoints ?? 0),
         coins: 0,
-        level: Number(student.level ?? 1),
-        xp: Number(student.xp ?? 0),
-        streak: Number(student.streak ?? 0),
+        streak: 0,
+        level: 0,
+        xp: 0,
+        positivePoints: Number(student.positivePoints ?? 0),
+        negativePoints: Number(student.negativePoints ?? 0),
+        totalPoints: Number(student.totalPoints ?? student.points ?? 0),
         parentId: "",
         seatRow: row,
         seatCol: col,

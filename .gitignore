@@ -24,6 +24,10 @@ yarn-error.log*
 APi-spreadsheets.txt
 GOOGLE_SHEETS_BACKEND_SCHEMA.txt
 
+# runtime uploads
+/public/uploads/tasks/
+/.data/
+
 # vercel
 .vercel
 

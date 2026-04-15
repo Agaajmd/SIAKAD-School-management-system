@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { AttendanceRecord, AttendanceStatus } from "@/lib/data-model"
 import { getSessionUser } from "@/lib/server/session-user"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
-import { getDbAttendance, getDbStudents, setDbAttendance, setDbStudents } from "@/lib/server/data-store"
+import { getDbAttendance, getDbStudents, setDbAttendance, setDbStudents } from "@/lib/server/persistent-store"
 import { getAllDbAttendanceRecords, upsertDbAttendanceRecord } from "@/lib/server/google-sheets-attendance"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -44,13 +44,13 @@ export async function POST(request: Request) {
           role: "STUDENT",
           classId: studentUser.classId || "",
           paymentStatus: "UNPAID",
-          behaviorScore: 100,
+          behaviorScore: 0,
           attendance: "PRESENT",
           seatRow: 0,
           seatCol: 0,
           coins: 0,
           streak: 0,
-          level: 1,
+          level: 0,
           xp: 0,
         }
         students = [...students.filter((student) => student.id !== studentId), targetStudent]

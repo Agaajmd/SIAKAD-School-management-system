@@ -9,7 +9,7 @@ import {
   getDbCanteenOwners,
   setDbCanteenOwners,
   setDbCanteens,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

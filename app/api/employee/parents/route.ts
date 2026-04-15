@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { createDbUser, deleteDbUserById, getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
-import { getDbParents, setDbParents } from "@/lib/server/data-store"
+import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
+import { getDbParents, setDbParents } from "@/lib/server/persistent-store"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -26,22 +27,56 @@ export async function GET(request: Request) {
       avatar: user.avatar,
       role: "STUDENT" as const,
       paymentStatus: "UNPAID" as const,
-      behaviorScore: 100,
+      behaviorScore: 0,
       attendance: "PRESENT" as const,
       seatRow: 0,
       seatCol: 0,
       coins: 0,
       streak: 0,
-      level: 1,
+      level: 0,
       xp: 0,
     }))
     .filter((student) => (normalizedClassId ? student.classId === normalizedClassId : true))
+
+  let activityPoints = [] as Awaited<ReturnType<typeof getAllDbActivityPointsFromSheet>>
+  try {
+    activityPoints = await getAllDbActivityPointsFromSheet()
+  } catch {
+    activityPoints = []
+  }
+
   const studentIds = new Set(students.map((student) => student.id))
+  const pointSummaryByStudentId = activityPoints.reduce((acc, point) => {
+    if (!studentIds.has(point.studentId)) {
+      return acc
+    }
+    const bucket = acc[point.studentId] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+    if (point.type === "NEGATIVE") {
+      bucket.negativePoints += Math.abs(Number(point.points) || 0)
+    } else {
+      bucket.positivePoints += Math.abs(Number(point.points) || 0)
+    }
+    bucket.totalPoints = bucket.positivePoints - bucket.negativePoints
+    acc[point.studentId] = bucket
+    return acc
+  }, {} as Record<string, { positivePoints: number; negativePoints: number; totalPoints: number }>)
+
+  const studentsWithPoints = students.map((student) => {
+    const summary = pointSummaryByStudentId[student.id] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+    return {
+      ...student,
+      positivePoints: summary.positivePoints,
+      negativePoints: summary.negativePoints,
+      totalPoints: summary.totalPoints,
+      points: summary.totalPoints,
+    }
+  })
+
   const parents = getDbParents()
     .filter((parent) => parent.childrenIds.some((childId) => studentIds.has(childId)))
     .map((parent) => {
       const firstChildId = parent.childrenIds.find((childId) => studentIds.has(childId)) || ""
-      const firstChild = students.find((student) => student.id === firstChildId)
+      const firstChild = studentsWithPoints.find((student) => student.id === firstChildId)
       return {
         ...parent,
         childId: firstChildId,
@@ -49,7 +84,7 @@ export async function GET(request: Request) {
       }
     })
 
-  return NextResponse.json({ parents, students })
+  return NextResponse.json({ parents, students: studentsWithPoints })
 }
 
 export async function POST(request: Request) {

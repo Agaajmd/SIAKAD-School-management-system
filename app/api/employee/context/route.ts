@@ -3,6 +3,9 @@ import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbAttendanceRecords } from "@/lib/server/google-sheets-attendance"
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
+import { getAllDbTasks } from "@/lib/server/google-sheets-tasks"
+import { getAllDbTaskSubmissions } from "@/lib/server/google-sheets-task-submissions"
+import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -15,9 +18,11 @@ import {
   getDbTasks,
   getDbTeachers,
   setDbAttendance,
+  setDbTaskSubmissions,
+  setDbTasks,
   setDbSchedules,
   setDbStudents,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 
 const normalizeId = (value: unknown) => String(value || "").trim().toLowerCase()
 
@@ -27,11 +32,35 @@ const sameId = (left: unknown, right: unknown) => {
   return Boolean(normalizedLeft) && normalizedLeft === normalizedRight
 }
 
+async function loadTasksFromSheetOrStore() {
+  try {
+    const tasks = await getAllDbTasks()
+    setDbTasks(tasks)
+    return tasks
+  } catch {
+    return getDbTasks()
+  }
+}
+
+async function loadTaskSubmissionsFromSheetOrStore() {
+  try {
+    const submissions = await getAllDbTaskSubmissions()
+    setDbTaskSubmissions(submissions)
+    return submissions
+  } catch {
+    return getDbTaskSubmissions()
+  }
+}
+
 export async function GET() {
   const sessionUser = await getSessionUser()
-  const users = await getAllDbUsers()
-  const classesFromSheet = await getAllDbClasses()
-  const schedulesFromSheet = await getAllDbSchedules()
+  const [users, classesFromSheet, schedulesFromSheet, tasksFromSource, submissionsFromSource] = await Promise.all([
+    getAllDbUsers(),
+    getAllDbClasses(),
+    getAllDbSchedules(),
+    loadTasksFromSheetOrStore(),
+    loadTaskSubmissionsFromSheetOrStore(),
+  ])
   const { resolveClassId } = createClassIdResolver(classesFromSheet)
   setDbSchedules(schedulesFromSheet)
   const mappedTeacher =
@@ -73,7 +102,7 @@ export async function GET() {
         classIds.add(resolveClassId(classRoom.id))
       }
     }
-    for (const task of getDbTasks()) {
+    for (const task of tasksFromSource) {
       if (sameId(task.teacherId, employeeId)) {
         const normalizedClassId = resolveClassId(task.classId)
         if (normalizedClassId) {
@@ -119,13 +148,13 @@ export async function GET() {
       avatar: user.avatar,
       role: "STUDENT" as const,
       paymentStatus: "UNPAID" as const,
-      behaviorScore: 100,
+      behaviorScore: 0,
       attendance: "PRESENT" as const,
       seatRow: 0,
       seatCol: 0,
       coins: 0,
       streak: 0,
-      level: 1,
+      level: 0,
       xp: 0,
     }))
 
@@ -183,12 +212,46 @@ export async function GET() {
     }
   })
 
-  const seatedStudents = assignStudentSeatsToClasses(classes, studentsWithAttendance as any)
+  let activityPoints = [] as Awaited<ReturnType<typeof getAllDbActivityPointsFromSheet>>
+  try {
+    activityPoints = await getAllDbActivityPointsFromSheet()
+  } catch {
+    activityPoints = []
+  }
+
+  const studentIds = new Set(studentsWithAttendance.map((student) => student.id))
+  const pointSummaryByStudentId = activityPoints.reduce((acc, point) => {
+    if (!studentIds.has(point.studentId)) {
+      return acc
+    }
+    const bucket = acc[point.studentId] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+    if (point.type === "NEGATIVE") {
+      bucket.negativePoints += Math.abs(Number(point.points) || 0)
+    } else {
+      bucket.positivePoints += Math.abs(Number(point.points) || 0)
+    }
+    bucket.totalPoints = bucket.positivePoints - bucket.negativePoints
+    acc[point.studentId] = bucket
+    return acc
+  }, {} as Record<string, { positivePoints: number; negativePoints: number; totalPoints: number }>)
+
+  const studentsWithPoints = studentsWithAttendance.map((student) => {
+    const summary = pointSummaryByStudentId[student.id] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
+    return {
+      ...student,
+      positivePoints: summary.positivePoints,
+      negativePoints: summary.negativePoints,
+      totalPoints: summary.totalPoints,
+      points: summary.totalPoints,
+    }
+  })
+
+  const seatedStudents = assignStudentSeatsToClasses(classes, studentsWithPoints as any)
   setDbStudents(seatedStudents as any)
 
-  const tasks = employeeId ? getDbTasks().filter((task) => sameId(task.teacherId, employeeId)) : []
+  const tasks = employeeId ? tasksFromSource.filter((task) => sameId(task.teacherId, employeeId)) : []
   const taskIds = new Set(tasks.map((task) => task.id))
-  const taskSubmissions = getDbTaskSubmissions().filter((submission) => taskIds.has(submission.taskId))
+  const taskSubmissions = submissionsFromSource.filter((submission) => taskIds.has(submission.taskId))
 
   return NextResponse.json({
     employee,

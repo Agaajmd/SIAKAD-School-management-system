@@ -351,27 +351,34 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {"coins" in selectedUser && (
+              {selectedUser.role === "STUDENT" && (
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
-                    <p className="text-[10px] sm:text-xs text-slate-500">Koin</p>
-                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.coins}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-500">Total Poin</p>
+                    <p
+                      className={`font-semibold text-sm sm:text-base ${
+                        Number((selectedUser as any).totalPoints ?? (selectedUser as any).points ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}
+                    >
+                      {Number((selectedUser as any).totalPoints ?? (selectedUser as any).points ?? 0) >= 0 ? "+" : ""}
+                      {Number((selectedUser as any).totalPoints ?? (selectedUser as any).points ?? 0)}
+                    </p>
                   </div>
                   <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
-                    <p className="text-[10px] sm:text-xs text-slate-500">Level</p>
-                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.level}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-500">Poin Positif</p>
+                    <p className="font-semibold text-emerald-600 text-sm sm:text-base">+{Number((selectedUser as any).positivePoints ?? 0)}</p>
                   </div>
                   <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
                     <p className="text-[10px] sm:text-xs text-slate-500">Pembayaran</p>
                     <p
-                      className={`font-semibold text-sm sm:text-base ${selectedUser.paymentStatus === "PAID" ? "text-green-600" : "text-red-500"}`}
+                      className={`font-semibold text-sm sm:text-base ${(selectedUser as any).paymentStatus === "PAID" ? "text-green-600" : "text-red-500"}`}
                     >
-                      {selectedUser.paymentStatus}
+                      {(selectedUser as any).paymentStatus || "UNPAID"}
                     </p>
                   </div>
                   <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl">
-                    <p className="text-[10px] sm:text-xs text-slate-500">Perilaku</p>
-                    <p className="font-semibold text-slate-800 text-sm sm:text-base">{selectedUser.behaviorScore}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-500">Poin Negatif</p>
+                    <p className="font-semibold text-rose-600 text-sm sm:text-base">-{Number((selectedUser as any).negativePoints ?? 0)}</p>
                   </div>
                 </div>
               )}
