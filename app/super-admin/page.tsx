@@ -5,6 +5,8 @@ import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { FinancialChart } from "@/components/organisms/financial-chart"
 import { EmployeeLeaderboard } from "@/components/organisms/employee-leaderboard"
+import { SchoolWalletTopup } from "@/components/organisms/school-wallet-topup"
+import { WalletCard } from "@/components/organisms/wallet-card"
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -127,6 +129,20 @@ export default function SuperAdminDashboard() {
             ))}
           </div>
         </div>
+
+        <SchoolWalletTopup
+          role="SUPER_ADMIN"
+          renderTrigger={({ openModal, walletBalance, pendingAmount, isLoading }) => (
+            <WalletCard
+              ownerName={superAdmin.name}
+              secondaryLabel="Kepala Sekolah"
+              walletBalance={walletBalance}
+              pendingAmount={pendingAmount}
+              isLoading={isLoading}
+              onTopupClick={openModal}
+            />
+          )}
+        />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

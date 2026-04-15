@@ -6,6 +6,8 @@ export type ReportStatus = "PENDING" | "IN_PROGRESS" | "RESOLVED"
 export type ReportType = "KERUSAKAN" | "FASILITAS" | "LAINNYA"
 export type OrderStatus = "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED"
 export type ProductCategory = "MAKANAN" | "MINUMAN" | "SNACK"
+export type WalletTopupStatus = "PENDING" | "APPROVED" | "REJECTED"
+export type WalletTopupMethod = "QRIS" | "GOPAY" | "SHOPEEPAY" | "BCA_TRANSFER"
 
 export interface User {
   id: string
@@ -74,8 +76,10 @@ export interface Task {
   dueDate: string
   createdAt: string
   attachmentUrl?: string
+  attachmentUrls?: string[]
   attachmentName?: string
   imageUrl?: string
+  imageUrls?: string[]
   maxScore: number
 }
 
@@ -85,7 +89,9 @@ export interface TaskSubmission {
   studentId: string
   submittedAt: string
   attachmentUrl?: string
+  attachmentUrls?: string[]
   imageUrl?: string
+  imageUrls?: string[]
   attachmentName?: string
   score?: number
   feedback?: string
@@ -113,6 +119,24 @@ export interface AssetReport {
   handledBy?: string
   handledAt?: string
   resolution?: string
+}
+
+export interface WalletTopup {
+  id: string
+  userId: string
+  userName: string
+  userRole: UserRole
+  amount: number
+  method: WalletTopupMethod
+  destinationAccount: string
+  destinationName: string
+  proofReference?: string
+  proofUrl?: string
+  status: WalletTopupStatus
+  requestedAt: string
+  processedAt?: string
+  processedBy?: string
+  adminNote?: string
 }
 
 export interface StudentGrade {

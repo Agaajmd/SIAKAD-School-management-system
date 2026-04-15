@@ -82,8 +82,37 @@ function toNumber(value: string, fallback: number) {
   return Number.isFinite(next) ? next : fallback
 }
 
+function parseSerializedUrlList(value: string) {
+  const raw = String(value || "").trim()
+  if (!raw) return [] as string[]
+
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      }
+    } catch {
+      // Fallback to legacy single-url format.
+    }
+  }
+
+  return [raw]
+}
+
+function serializeUrlList(list: string[]) {
+  const normalized = list.map((item) => String(item || "").trim()).filter(Boolean)
+  if (normalized.length === 0) return ""
+  if (normalized.length === 1) return normalized[0]
+  return JSON.stringify(normalized)
+}
+
 function normalizeTaskRow(row: string[]): Task {
   const maxScore = toNumber(row[11] || "", 100)
+  const attachmentUrls = parseSerializedUrlList(row[8] || "")
+  const imageUrls = parseSerializedUrlList(row[10] || "")
   return {
     id: row[0] || "",
     title: row[1] || "",
@@ -93,9 +122,11 @@ function normalizeTaskRow(row: string[]): Task {
     teacherId: row[5] || "",
     dueDate: row[6] || "",
     createdAt: row[7] || new Date().toISOString(),
-    attachmentUrl: row[8] || undefined,
+    attachmentUrl: attachmentUrls[0] || undefined,
+    attachmentUrls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
     attachmentName: row[9] || undefined,
-    imageUrl: row[10] || undefined,
+    imageUrl: imageUrls[0] || undefined,
+    imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
     maxScore,
   }
 }
@@ -106,6 +137,17 @@ function isQuotaExceededError(error: unknown) {
 }
 
 function toTaskSheetRow(task: Task, updatedAt: string) {
+  const attachmentUrls = Array.isArray(task.attachmentUrls)
+    ? task.attachmentUrls
+    : task.attachmentUrl
+      ? [task.attachmentUrl]
+      : []
+  const imageUrls = Array.isArray(task.imageUrls)
+    ? task.imageUrls
+    : task.imageUrl
+      ? [task.imageUrl]
+      : []
+
   return [
     task.id,
     task.title,
@@ -115,9 +157,9 @@ function toTaskSheetRow(task: Task, updatedAt: string) {
     task.teacherId,
     task.dueDate,
     task.createdAt,
-    task.attachmentUrl || "",
+    serializeUrlList(attachmentUrls),
     task.attachmentName || "",
-    task.imageUrl || "",
+    serializeUrlList(imageUrls),
     String(task.maxScore || 100),
     updatedAt,
   ]
@@ -235,6 +277,19 @@ async function getDbTaskRowById(id: string): Promise<{ task: Task; rowNumber: nu
 
 export async function createDbTask(input: Omit<Task, "id" | "createdAt"> & { id?: string; createdAt?: string }): Promise<Task> {
   const now = new Date().toISOString()
+  const attachmentUrls = [
+    ...(Array.isArray(input.attachmentUrls) ? input.attachmentUrls : []),
+    ...(input.attachmentUrl ? [input.attachmentUrl] : []),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+  const imageUrls = [
+    ...(Array.isArray(input.imageUrls) ? input.imageUrls : []),
+    ...(input.imageUrl ? [input.imageUrl] : []),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+
   const next: Task = {
     id: input.id || `task-${Date.now()}`,
     title: String(input.title || "").trim(),
@@ -244,9 +299,11 @@ export async function createDbTask(input: Omit<Task, "id" | "createdAt"> & { id?
     teacherId: String(input.teacherId || "").trim(),
     dueDate: String(input.dueDate || "").trim(),
     createdAt: input.createdAt || now,
-    attachmentUrl: input.attachmentUrl || undefined,
+    attachmentUrl: attachmentUrls[0] || undefined,
+    attachmentUrls: attachmentUrls.length > 0 ? [...new Set(attachmentUrls)] : undefined,
     attachmentName: input.attachmentName || undefined,
-    imageUrl: input.imageUrl || undefined,
+    imageUrl: imageUrls[0] || undefined,
+    imageUrls: imageUrls.length > 0 ? [...new Set(imageUrls)] : undefined,
     maxScore: Number(input.maxScore) || 100,
   }
 
@@ -275,6 +332,26 @@ export async function updateDbTaskById(input: Partial<Task> & { id: string }): P
 
   const current = target.task
   const now = new Date().toISOString()
+  const nextAttachmentUrls =
+    input.attachmentUrls != null
+      ? input.attachmentUrls
+      : input.attachmentUrl != null
+        ? [input.attachmentUrl]
+        : current.attachmentUrls || (current.attachmentUrl ? [current.attachmentUrl] : [])
+  const nextImageUrls =
+    input.imageUrls != null
+      ? input.imageUrls
+      : input.imageUrl != null
+        ? [input.imageUrl]
+        : current.imageUrls || (current.imageUrl ? [current.imageUrl] : [])
+
+  const normalizedAttachmentUrls = nextAttachmentUrls
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+  const normalizedImageUrls = nextImageUrls
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+
   const next: Task = {
     id: current.id,
     title: input.title != null ? String(input.title).trim() : current.title,
@@ -284,9 +361,11 @@ export async function updateDbTaskById(input: Partial<Task> & { id: string }): P
     teacherId: input.teacherId != null ? String(input.teacherId).trim() : current.teacherId,
     dueDate: input.dueDate != null ? String(input.dueDate).trim() : current.dueDate,
     createdAt: current.createdAt,
-    attachmentUrl: input.attachmentUrl != null ? input.attachmentUrl : current.attachmentUrl,
+    attachmentUrl: normalizedAttachmentUrls[0] || undefined,
+    attachmentUrls: normalizedAttachmentUrls.length > 0 ? [...new Set(normalizedAttachmentUrls)] : undefined,
     attachmentName: input.attachmentName != null ? input.attachmentName : current.attachmentName,
-    imageUrl: input.imageUrl != null ? input.imageUrl : current.imageUrl,
+    imageUrl: normalizedImageUrls[0] || undefined,
+    imageUrls: normalizedImageUrls.length > 0 ? [...new Set(normalizedImageUrls)] : undefined,
     maxScore: input.maxScore != null ? Number(input.maxScore) || 100 : current.maxScore,
   }
 

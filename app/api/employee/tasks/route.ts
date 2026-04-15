@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { Task } from "@/lib/data-model"
 import { getSessionUser } from "@/lib/server/session-user"
+import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
@@ -64,11 +65,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ tasks: [], submissions: [], classes: [], employee: null })
   }
 
-  const [tasksFromSource, classesFromSheet, schedulesFromSheet, submissionsFromSource] = await Promise.all([
+  const [tasksFromSource, classesFromSheet, schedulesFromSheet, submissionsFromSource, users] = await Promise.all([
     loadTasksFromSheetOrStore(),
     getAllDbClasses().catch(() => getDbClasses()),
     getAllDbSchedules().catch(() => []),
     loadTaskSubmissionsFromSheetOrStore(),
+    getAllDbUsers().catch(() => []),
   ])
 
   const { resolveClassId } = createClassIdResolver(classesFromSheet)
@@ -128,11 +130,24 @@ export async function GET(request: Request) {
     subject: sessionUser?.subject || teacherMap?.subject || "-",
   }
 
+  const studentsById = users
+    .filter(
+      (user) =>
+        user.role === "STUDENT" &&
+        user.isActive &&
+        classIds.has(resolveClassId(user.classId)),
+    )
+    .reduce((acc, user) => {
+      acc[user.id] = user.name
+      return acc
+    }, {} as Record<string, string>)
+
   return NextResponse.json({
     tasks,
     submissions: submissionsFromSource,
     classes: [...classesMap.values()].map(toClassOption),
     employee,
+    studentsById,
   })
 }
 
@@ -151,12 +166,20 @@ export async function POST(request: Request) {
   const normalizedClassId = resolveClassId(payload.classId)
   const taskId = payload.id || `task-${Date.now()}`
 
-  let normalizedMedia: { attachmentUrl?: string; imageUrl?: string; attachmentName?: string }
+  let normalizedMedia: {
+    attachmentUrl?: string
+    attachmentUrls?: string[]
+    imageUrl?: string
+    imageUrls?: string[]
+    attachmentName?: string
+  }
   try {
     normalizedMedia = await normalizeTaskMedia(
       {
         attachmentUrl: payload.attachmentUrl,
+        attachmentUrls: payload.attachmentUrls,
         imageUrl: payload.imageUrl,
+        imageUrls: payload.imageUrls,
         attachmentName: payload.attachmentName,
       },
       { taskId },
@@ -175,7 +198,9 @@ export async function POST(request: Request) {
     classId: normalizedClassId || payload.classId,
     createdAt: payload.createdAt || new Date().toISOString(),
     attachmentUrl: normalizedMedia.attachmentUrl || undefined,
+    attachmentUrls: normalizedMedia.attachmentUrls,
     imageUrl: normalizedMedia.imageUrl || undefined,
+    imageUrls: normalizedMedia.imageUrls,
     attachmentName: normalizedMedia.attachmentName || undefined,
   }
 
@@ -217,12 +242,26 @@ export async function PATCH(request: Request) {
   const classes = await getAllDbClasses().catch(() => getDbClasses())
   const { resolveClassId } = createClassIdResolver(classes)
 
-  let normalizedMedia: { attachmentUrl?: string; imageUrl?: string; attachmentName?: string }
+  let normalizedMedia: {
+    attachmentUrl?: string
+    attachmentUrls?: string[]
+    imageUrl?: string
+    imageUrls?: string[]
+    attachmentName?: string
+  }
   try {
     normalizedMedia = await normalizeTaskMedia(
       {
         attachmentUrl: payload.attachmentUrl != null ? String(payload.attachmentUrl) : existing.attachmentUrl,
+        attachmentUrls:
+          payload.attachmentUrls != null
+            ? payload.attachmentUrls
+            : existing.attachmentUrls || (existing.attachmentUrl ? [existing.attachmentUrl] : []),
         imageUrl: payload.imageUrl != null ? String(payload.imageUrl) : existing.imageUrl,
+        imageUrls:
+          payload.imageUrls != null
+            ? payload.imageUrls
+            : existing.imageUrls || (existing.imageUrl ? [existing.imageUrl] : []),
         attachmentName: payload.attachmentName != null ? String(payload.attachmentName) : existing.attachmentName,
       },
       { taskId: existing.id },
@@ -241,7 +280,9 @@ export async function PATCH(request: Request) {
     classId: payload.classId != null ? (resolveClassId(payload.classId) || payload.classId) : existing.classId,
     createdAt: existing.createdAt,
     attachmentUrl: normalizedMedia.attachmentUrl,
+    attachmentUrls: normalizedMedia.attachmentUrls,
     imageUrl: normalizedMedia.imageUrl,
+    imageUrls: normalizedMedia.imageUrls,
     attachmentName: normalizedMedia.attachmentName,
   }
   if (sessionUser?.role === "EMPLOYEE" && !sameId(updated.teacherId, sessionUser.id)) {

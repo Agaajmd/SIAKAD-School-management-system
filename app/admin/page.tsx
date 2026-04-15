@@ -15,7 +15,8 @@ import {
   PackageCheck,
   Activity,
   QrCode,
-  Users
+  Users,
+  Wallet
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -74,6 +75,7 @@ export default function AdminDashboard() {
   const quickActions = [
     { href: "/admin/scan", icon: QrCode, label: "Scan QR Aset", description: "Scan dan laporkan masalah aset", color: "bg-blue-500" },
     { href: "/admin/users", icon: Users, label: "Data Pengguna", description: "Lihat dan kelola data pengguna", color: "bg-emerald-500" },
+    { href: "/admin/wallet-topups", icon: Wallet, label: "Konfirmasi Topup", description: "Verifikasi permintaan topup dompet", color: "bg-amber-500" },
   ]
 
   const getStatusColor = (status: string) => {
@@ -150,7 +152,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {quickActions.map((action) => {
             const Icon = action.icon
             return (

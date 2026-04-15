@@ -7,13 +7,35 @@ export interface ClassIdResolver {
 
 export function createClassIdResolver(classes: ClassRoom[]): ClassIdResolver {
   const classIdSet = new Set(classes.map((item) => item.id))
-  const classNameToId = new Map(classes.map((item) => [item.name.trim().toLowerCase(), item.id]))
+  const classAliasToId = new Map<string, string>()
+
+  for (const classItem of classes) {
+    const aliases = [
+      classItem.id,
+      classItem.name,
+      classItem.grade,
+      `${classItem.name} ${classItem.grade}`,
+      `${classItem.grade} ${classItem.name}`,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+
+    for (const alias of aliases) {
+      const normalized = alias.toLowerCase()
+      const loose = normalized.replace(/[^a-z0-9]/g, "")
+      classAliasToId.set(normalized, classItem.id)
+      classAliasToId.set(loose, classItem.id)
+    }
+  }
 
   const resolveClassId = (rawClassId?: string) => {
     const value = String(rawClassId || "").trim()
     if (!value) return ""
     if (classIdSet.has(value)) return value
-    return classNameToId.get(value.toLowerCase()) || value
+
+    const normalized = value.toLowerCase()
+    const loose = normalized.replace(/[^a-z0-9]/g, "")
+    return classAliasToId.get(normalized) || classAliasToId.get(loose) || value
   }
 
   const sameClass = (left?: string, right?: string) => {

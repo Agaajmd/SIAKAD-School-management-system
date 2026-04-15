@@ -142,6 +142,8 @@ export async function GET(request: Request) {
   const studentClass = classesFromSheet.find((item) => item.id === classId) || getDbClasses().find((item) => item.id === classId) || null
   const classmates = students.filter((item) => item.classId === classId)
   const classmateIds = new Set(classmates.map((item) => item.id))
+  const className = studentClass?.name || student.classId || "-"
+  const classGrade = studentClass?.grade || ""
 
   const allActivityPoints = await loadActivityPointsFromSheet()
   const pointSummaryByStudentId = allActivityPoints.reduce((acc, point) => {
@@ -163,6 +165,8 @@ export async function GET(request: Request) {
     const summary = pointSummaryByStudentId[item.id] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
     return {
       ...item,
+      className,
+      classGrade,
       positivePoints: summary.positivePoints,
       negativePoints: summary.negativePoints,
       totalPoints: summary.totalPoints,
@@ -173,6 +177,8 @@ export async function GET(request: Request) {
   const studentPointSummary = pointSummaryByStudentId[student.id] || { positivePoints: 0, negativePoints: 0, totalPoints: 0 }
   const studentWithPoints = {
     ...student,
+    className,
+    classGrade,
     positivePoints: studentPointSummary.positivePoints,
     negativePoints: studentPointSummary.negativePoints,
     totalPoints: studentPointSummary.totalPoints,

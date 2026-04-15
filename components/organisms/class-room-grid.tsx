@@ -55,6 +55,21 @@ export const ClassRoomGrid = ({
     }
   }
 
+  const toFiniteNumber = (value: unknown, fallback = 0) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
+
+  const getPositivePoints = (student: Student) => toFiniteNumber((student as any).positivePoints)
+  const getNegativePoints = (student: Student) => toFiniteNumber((student as any).negativePoints)
+  const getTotalPoints = (student: Student) => {
+    const totalPoints = (student as any).totalPoints ?? (student as any).points
+    if (totalPoints != null) {
+      return toFiniteNumber(totalPoints)
+    }
+    return getPositivePoints(student) - getNegativePoints(student)
+  }
+
   const handleSeatClick = (student: Student) => {
     if (viewOnly && !allowSeatClickInViewOnly) return
     if (lockUnpaidSeats && student.paymentStatus === "UNPAID") return
@@ -134,12 +149,16 @@ export const ClassRoomGrid = ({
 
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl sm:rounded-2xl text-center transition-all duration-300 hover:bg-slate-100">
-                <p className="text-xl sm:text-2xl font-bold text-emerald-600">+{Number((selectedStudent as any).positivePoints ?? 0)}</p>
+                <p className="text-xl sm:text-2xl font-bold text-emerald-600">+{getPositivePoints(selectedStudent)}</p>
                 <p className="text-[10px] sm:text-xs text-slate-500">Poin Positif</p>
               </div>
               <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl sm:rounded-2xl text-center transition-all duration-300 hover:bg-slate-100">
-                <p className="text-xl sm:text-2xl font-bold text-rose-600">-{Number((selectedStudent as any).negativePoints ?? 0)}</p>
+                <p className="text-xl sm:text-2xl font-bold text-rose-600">-{getNegativePoints(selectedStudent)}</p>
                 <p className="text-[10px] sm:text-xs text-slate-500">Poin Negatif</p>
+              </div>
+              <div className="col-span-2 p-2.5 sm:p-3 bg-blue-50 border border-blue-200 rounded-xl sm:rounded-2xl text-center">
+                <p className="text-xl sm:text-2xl font-bold text-blue-600">{getTotalPoints(selectedStudent)}</p>
+                <p className="text-[10px] sm:text-xs text-blue-600">Total Poin</p>
               </div>
             </div>
 

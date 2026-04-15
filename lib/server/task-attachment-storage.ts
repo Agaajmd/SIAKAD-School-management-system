@@ -8,7 +8,9 @@ type MediaKind = "attachment" | "image"
 
 type NormalizeTaskMediaInput = {
   attachmentUrl?: string
+  attachmentUrls?: string[]
   imageUrl?: string
+  imageUrls?: string[]
   attachmentName?: string
 }
 
@@ -48,6 +50,15 @@ const sanitizeBaseName = (value: string) => {
 const normalizeMaybeString = (value: unknown) => {
   if (value == null) return undefined
   return String(value).trim()
+}
+
+const toNormalizedUrlList = (primary?: string, list?: string[]) => {
+  const values = [primary, ...(Array.isArray(list) ? list : [])]
+  const normalized = values
+    .map((value) => normalizeMaybeString(value))
+    .filter((value): value is string => Boolean(value))
+
+  return [...new Set(normalized)]
 }
 
 const isDataUrl = (value: string) => value.startsWith(DATA_URL_PREFIX) && value.includes(";base64,")
@@ -124,55 +135,48 @@ export async function normalizeTaskMedia(
   input: NormalizeTaskMediaInput,
   options: NormalizeTaskMediaOptions,
 ): Promise<NormalizeTaskMediaInput> {
-  let attachmentUrl = normalizeMaybeString(input.attachmentUrl)
-  let imageUrl = normalizeMaybeString(input.imageUrl)
+  const attachmentUrls = toNormalizedUrlList(input.attachmentUrl, input.attachmentUrls)
+  const imageUrls = toNormalizedUrlList(input.imageUrl, input.imageUrls)
   let attachmentName = normalizeMaybeString(input.attachmentName)
 
-  const hasSharedDataUrl =
-    Boolean(attachmentUrl) &&
-    Boolean(imageUrl) &&
-    attachmentUrl === imageUrl &&
-    isDataUrl(String(attachmentUrl))
-
-  if (hasSharedDataUrl) {
-    const persisted = await persistDataUrlAsFile(String(attachmentUrl), {
-      taskId: options.taskId,
-      kind: "attachment",
-      originalName: attachmentName,
-    })
-    attachmentUrl = persisted.publicUrl
-    imageUrl = persisted.publicUrl
-    attachmentName = attachmentName || persisted.fileName
-
-    return {
-      attachmentUrl,
-      imageUrl,
-      attachmentName,
+  const normalizedAttachmentUrls: string[] = []
+  for (const url of attachmentUrls) {
+    if (isDataUrl(url)) {
+      const persisted = await persistDataUrlAsFile(url, {
+        taskId: options.taskId,
+        kind: "attachment",
+        originalName: attachmentName,
+      })
+      normalizedAttachmentUrls.push(persisted.publicUrl)
+      attachmentName = attachmentName || persisted.fileName
+      continue
     }
+    normalizedAttachmentUrls.push(url)
   }
 
-  if (attachmentUrl && isDataUrl(attachmentUrl)) {
-    const persisted = await persistDataUrlAsFile(attachmentUrl, {
-      taskId: options.taskId,
-      kind: "attachment",
-      originalName: attachmentName,
-    })
-    attachmentUrl = persisted.publicUrl
-    attachmentName = attachmentName || persisted.fileName
+  const normalizedImageUrls: string[] = []
+  for (const url of imageUrls) {
+    if (isDataUrl(url)) {
+      const persisted = await persistDataUrlAsFile(url, {
+        taskId: options.taskId,
+        kind: "image",
+      })
+      normalizedImageUrls.push(persisted.publicUrl)
+      continue
+    }
+    normalizedImageUrls.push(url)
   }
 
-  if (imageUrl && isDataUrl(imageUrl)) {
-    const persisted = await persistDataUrlAsFile(imageUrl, {
-      taskId: options.taskId,
-      kind: "image",
-      originalName: attachmentName,
-    })
-    imageUrl = persisted.publicUrl
-  }
+  const nextAttachmentUrls = [...new Set(normalizedAttachmentUrls)]
+  const nextImageUrls = [...new Set(normalizedImageUrls)]
+  const attachmentUrl = nextAttachmentUrls[0]
+  const imageUrl = nextImageUrls[0]
 
   return {
     attachmentUrl,
+    attachmentUrls: nextAttachmentUrls,
     imageUrl,
+    imageUrls: nextImageUrls,
     attachmentName,
   }
 }

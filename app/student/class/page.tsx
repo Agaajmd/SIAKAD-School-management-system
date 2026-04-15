@@ -80,8 +80,8 @@ export default function StudentClassPage() {
 
   const resolvedStudentClass = studentClass || {
     id: student.classId || "",
-    name: student.classId || "Kelas",
-    grade: "-",
+    name: student.className || "Kelas",
+    grade: student.classGrade || "-",
     rows: 6,
     cols: 6,
     teacherId: "",

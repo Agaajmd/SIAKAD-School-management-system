@@ -2,12 +2,39 @@ import { NextResponse } from "next/server"
 import { createDbUser, deleteDbUserById, getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
-import { getDbParents, setDbParents } from "@/lib/server/persistent-store"
+import { getDbParents, getDbStudents, setDbParents } from "@/lib/server/persistent-store"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
+
+const normalizeId = (value: unknown) => String(value || "").trim().toLowerCase()
+const normalizeLooseId = (value: unknown) => normalizeId(value).replace(/[^a-z0-9]/g, "")
+
+const splitRelationTokens = (raw: unknown) => {
+  const value = String(raw || "").trim()
+  if (!value) return [] as string[]
+
+  if (value.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => String(item || "").trim().replace(/^["']|["']$/g, ""))
+          .filter(Boolean)
+      }
+    } catch {
+      // Fallback to token split format below.
+    }
+  }
+
+  return value
+    .replace(/\r/g, "\n")
+    .split(/[;,\n|/]+|\s+dan\s+|\s*&\s*/gi)
+    .map((item) => item.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean)
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -16,8 +43,9 @@ export async function GET(request: Request) {
   const [users, classes] = await Promise.all([getAllDbUsers(), getAllDbClasses()])
   const { resolveClassId } = createClassIdResolver(classes)
   const normalizedClassId = resolveClassId(classId)
+  const hasClassFilter = Boolean(normalizedClassId && classes.some((item) => item.id === normalizedClassId))
 
-  const students = users
+  const studentsFromUsers = users
     .filter((user) => user.role === "STUDENT" && user.isActive)
     .map((user) => ({
       id: user.id,
@@ -26,9 +54,9 @@ export async function GET(request: Request) {
       classId: resolveClassId(user.classId),
       avatar: user.avatar,
       role: "STUDENT" as const,
-      paymentStatus: "UNPAID" as const,
+      paymentStatus: "UNPAID" as "PAID" | "UNPAID" | "PARTIAL",
       behaviorScore: 0,
-      attendance: "PRESENT" as const,
+      attendance: "PRESENT" as "PRESENT" | "SICK" | "ALPHA",
       seatRow: 0,
       seatCol: 0,
       coins: 0,
@@ -36,7 +64,42 @@ export async function GET(request: Request) {
       level: 0,
       xp: 0,
     }))
-    .filter((student) => (normalizedClassId ? student.classId === normalizedClassId : true))
+  const studentsFromStore = getDbStudents().map((student) => ({
+    ...student,
+    classId: resolveClassId(student.classId),
+  }))
+
+  const mergedStudentsById = new Map<string, (typeof studentsFromUsers)[number]>()
+  for (const student of studentsFromStore) {
+    mergedStudentsById.set(student.id, {
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      classId: student.classId,
+      avatar: student.avatar,
+      role: "STUDENT" as const,
+      paymentStatus: student.paymentStatus || "UNPAID",
+      behaviorScore: student.behaviorScore || 0,
+      attendance: student.attendance || "PRESENT",
+      seatRow: Number(student.seatRow || 0),
+      seatCol: Number(student.seatCol || 0),
+      coins: Number(student.coins || 0),
+      streak: Number(student.streak || 0),
+      level: Number(student.level || 0),
+      xp: Number(student.xp || 0),
+    })
+  }
+  for (const student of studentsFromUsers) {
+    const existing = mergedStudentsById.get(student.id)
+    mergedStudentsById.set(student.id, {
+      ...(existing || student),
+      ...student,
+      classId: student.classId || existing?.classId || "",
+    })
+  }
+
+  const students = [...mergedStudentsById.values()]
+    .filter((student) => (hasClassFilter ? student.classId === normalizedClassId : true))
 
   let activityPoints = [] as Awaited<ReturnType<typeof getAllDbActivityPointsFromSheet>>
   try {
@@ -72,17 +135,189 @@ export async function GET(request: Request) {
     }
   })
 
-  const parents = getDbParents()
-    .filter((parent) => parent.childrenIds.some((childId) => studentIds.has(childId)))
-    .map((parent) => {
-      const firstChildId = parent.childrenIds.find((childId) => studentIds.has(childId)) || ""
-      const firstChild = studentsWithPoints.find((student) => student.id === firstChildId)
+  const studentsById = new Map(studentsWithPoints.map((student) => [student.id, student]))
+  const studentsByNormalizedId = new Map(studentsWithPoints.map((student) => [normalizeId(student.id), student]))
+  const studentsByLooseId = new Map(studentsWithPoints.map((student) => [normalizeLooseId(student.id), student]))
+  const studentsByClassId = studentsWithPoints.reduce((acc, student) => {
+    const key = student.classId
+    if (!key) return acc
+    const bucket = acc.get(key) || []
+    bucket.push(student.id)
+    acc.set(key, bucket)
+    return acc
+  }, new Map<string, string[]>())
+  const classAliasToId = new Map<string, string>()
+  for (const classItem of classes) {
+    const aliases = [
+      classItem.id,
+      classItem.name,
+      classItem.grade,
+      `${classItem.name} ${classItem.grade}`,
+      `${classItem.grade} ${classItem.name}`,
+    ]
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+
+    for (const alias of aliases) {
+      classAliasToId.set(normalizeId(alias), classItem.id)
+      classAliasToId.set(normalizeLooseId(alias), classItem.id)
+    }
+  }
+
+  const parentStore = getDbParents()
+  const parentStoreByIdentity = new Map<string, (typeof parentStore)[number]>()
+  for (const parent of parentStore) {
+    parentStoreByIdentity.set(normalizeId(parent.id), parent)
+    parentStoreByIdentity.set(normalizeId(parent.email), parent)
+  }
+
+  const resolveChildIds = (input: {
+    storeChildIds?: string[]
+    relationField?: string
+  }) => {
+    const resolved = new Set<string>()
+
+    const appendToken = (token: string) => {
+      if (!token) return
+
+      const candidates = [...new Set([
+        token,
+        token.includes(":") ? token.split(":").pop() || "" : "",
+        token.includes("=") ? token.split("=").pop() || "" : "",
+      ].map((item) => String(item || "").trim()).filter(Boolean))]
+
+      for (const candidate of candidates) {
+        const normalizedToken = normalizeId(candidate)
+        const looseToken = normalizeLooseId(candidate)
+
+        if (studentsById.has(candidate)) {
+          resolved.add(candidate)
+          return
+        }
+
+        const studentByNormalizedId = studentsByNormalizedId.get(normalizedToken) || studentsByLooseId.get(looseToken)
+        if (studentByNormalizedId?.id) {
+          resolved.add(studentByNormalizedId.id)
+          return
+        }
+
+        const normalizedClassToken =
+          classAliasToId.get(normalizedToken) ||
+          classAliasToId.get(looseToken) ||
+          resolveClassId(candidate)
+        const classChildIds = studentsByClassId.get(normalizedClassToken)
+        if (classChildIds && classChildIds.length > 0) {
+          for (const childId of classChildIds) {
+            resolved.add(childId)
+          }
+          return
+        }
+
+        const studentByName = studentsWithPoints.find(
+          (student) =>
+            normalizeId(student.name) === normalizedToken || normalizeLooseId(student.name) === looseToken,
+        )
+        if (studentByName?.id) {
+          resolved.add(studentByName.id)
+          return
+        }
+      }
+    }
+
+    for (const childId of input.storeChildIds || []) {
+      appendToken(String(childId || ""))
+    }
+
+    for (const token of splitRelationTokens(input.relationField)) {
+      appendToken(token)
+    }
+
+    return [...resolved]
+  }
+
+  const parentsFromUsers = users
+    .filter((user) => user.role === "PARENT" && user.isActive)
+    .map((user) => {
+      const parentMap =
+        parentStoreByIdentity.get(normalizeId(user.id)) || parentStoreByIdentity.get(normalizeId(user.email)) || null
+
+      const mappedChildIds = resolveChildIds({
+        storeChildIds: parentMap?.childrenIds,
+        relationField: user.classId,
+      }).filter((childId) => studentIds.has(childId))
+
+      if (mappedChildIds.length === 0) {
+        return null
+      }
+
+      const firstChildId = mappedChildIds[0]
+      const firstChild = studentsById.get(firstChildId)
+
       return {
-        ...parent,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        role: "PARENT" as const,
+        phone: user.phone || parentMap?.phone || "",
+        childrenIds: mappedChildIds,
         childId: firstChildId,
         childName: firstChild?.name || "-",
       }
     })
+    .filter(Boolean) as Array<{
+    id: string
+    name: string
+    email: string
+    avatar: string
+    role: "PARENT"
+    phone: string
+    childrenIds: string[]
+    childId: string
+    childName: string
+  }>
+
+  const parentsFromStoreOnly = parentStore
+    .filter(
+      (parent) =>
+        !parentsFromUsers.some(
+          (item) =>
+            normalizeId(item.id) === normalizeId(parent.id) ||
+            normalizeId(item.email) === normalizeId(parent.email),
+        ),
+    )
+    .map((parent) => {
+      const mappedChildIds = resolveChildIds({
+        storeChildIds: parent.childrenIds,
+      }).filter((childId) => studentIds.has(childId))
+
+      if (mappedChildIds.length === 0) {
+        return null
+      }
+
+      const firstChildId = mappedChildIds[0]
+      const firstChild = studentsById.get(firstChildId)
+
+      return {
+        ...parent,
+        childrenIds: mappedChildIds,
+        childId: firstChildId,
+        childName: firstChild?.name || "-",
+      }
+    })
+    .filter(Boolean) as Array<{
+    id: string
+    name: string
+    email: string
+    avatar: string
+    role: "PARENT"
+    phone: string
+    childrenIds: string[]
+    childId: string
+    childName: string
+  }>
+
+  const parents = [...parentsFromUsers, ...parentsFromStoreOnly]
 
   return NextResponse.json({ parents, students: studentsWithPoints })
 }
@@ -128,6 +363,7 @@ export async function POST(request: Request) {
     password,
     role: "PARENT",
     avatar: "/placeholder-user.jpg",
+    classId: childId,
   })
 
   const next = {
@@ -140,7 +376,12 @@ export async function POST(request: Request) {
     phone,
   }
 
-  setDbParents([...getDbParents(), next])
+  setDbParents([
+    ...getDbParents().filter(
+      (item) => normalizeId(item.id) !== normalizeId(next.id) && normalizeId(item.email) !== normalizeId(next.email),
+    ),
+    next,
+  ])
   logAudit({
     actorId: user.id,
     action: "CREATE",
@@ -196,6 +437,7 @@ export async function PATCH(request: Request) {
     email: body.email ? String(body.email) : undefined,
     phone: body.phone ? String(body.phone) : undefined,
     password: body.password ? String(body.password) : undefined,
+    classId: body.childId ? String(body.childId) : String(target.childrenIds[0] || "") || undefined,
   })
 
   const next = {

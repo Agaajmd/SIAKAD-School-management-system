@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { SchoolWalletTopup } from "@/components/organisms/school-wallet-topup"
 import { WalletCard } from "@/components/organisms/wallet-card"
 import { GamificationStats } from "@/components/organisms/gamification-stats"
 import { NextClassCard } from "@/components/organisms/next-class-card"
@@ -61,6 +62,10 @@ export default function StudentDashboard() {
     )
   }
 
+  const walletClassLabel = studentClass?.name
+    ? `${studentClass.name}${studentClass?.grade ? ` - Grade ${studentClass.grade}` : ""}`
+    : String(student.classId || "-")
+
   return (
     <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
       <div className="max-w-2xl mx-auto space-y-5 px-1">
@@ -71,7 +76,19 @@ export default function StudentDashboard() {
         </div>
 
         {/* Quick Stats */}
-        <WalletCard student={student} />
+        <SchoolWalletTopup
+          role="STUDENT"
+          renderTrigger={({ openModal, walletBalance, pendingAmount, isLoading }) => (
+            <WalletCard
+              ownerName={student.name}
+              secondaryLabel={walletClassLabel}
+              walletBalance={walletBalance}
+              pendingAmount={pendingAmount}
+              isLoading={isLoading}
+              onTopupClick={openModal}
+            />
+          )}
+        />
 
         <GamificationStats student={student} />
 
