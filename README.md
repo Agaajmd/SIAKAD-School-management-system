@@ -322,3 +322,10 @@ MIT License - Feel free to use for educational purposes.
 **Happy Coding! 🎉**
 
 </div>
+Saya ingin kamu membaca perintah ini dengan benar karena saya igin hasil maksimal walaupun proses kamu lama. saya ingin kamu membaca selurh kode dan mengintegrasikan Api dengan benar pada beberpa page employee atau guru berikut dengan baik dan benar dan jangna lupakan bahwa modal form itu juga jangan dilewatkan :
+Kelola Tugas
+Jadwal
+Kelas
+Poin Keaktifan
+AI Rapor
+Kantin

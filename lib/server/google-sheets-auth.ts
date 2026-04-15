@@ -21,6 +21,16 @@ const USERS_COLUMNS = [
   "subject",
 ]
 
+const USERS_CACHE_TTL_MS = 60_000
+const USERS_READY_TTL_MS = 5 * 60_000
+
+let usersCache: { expiresAt: number; data: DbUser[] } | null = null
+let usersSheetReadyAt = 0
+
+function invalidateUsersCache() {
+  usersCache = null
+}
+
 type ServiceAccount = {
   client_email: string
   private_key: string
@@ -122,7 +132,16 @@ function toPublicUser(user: DbUser): PublicUser {
   }
 }
 
+function isQuotaExceededError(error: unknown) {
+  const err = error as { code?: number; status?: number; message?: string }
+  return err?.code === 429 || err?.status === 429 || /quota exceeded/i.test(String(err?.message || ""))
+}
+
 export async function ensureUsersSheetReady() {
+  if (Date.now() - usersSheetReadyAt < USERS_READY_TTL_MS) {
+    return
+  }
+
   const sheets = await getSheetsClient()
   const spreadsheetId = getSpreadsheetId()
 
@@ -154,6 +173,7 @@ export async function ensureUsersSheetReady() {
 
   const firstRow = headerRes.data.values?.[0] || []
   if (firstRow.length === USERS_COLUMNS.length) {
+    usersSheetReadyAt = Date.now()
     return
   }
 
@@ -165,22 +185,40 @@ export async function ensureUsersSheetReady() {
       values: [USERS_COLUMNS],
     },
   })
+
+  usersSheetReadyAt = Date.now()
 }
 
 export async function getAllDbUsers(): Promise<DbUser[]> {
-  await ensureUsersSheetReady()
-  const sheets = await getSheetsClient()
-  const spreadsheetId = getSpreadsheetId()
+  if (usersCache && usersCache.expiresAt > Date.now()) {
+    return usersCache.data
+  }
 
-  const rowsRes = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A2:L`,
-  })
+  try {
+    await ensureUsersSheetReady()
+    const sheets = await getSheetsClient()
+    const spreadsheetId = getSpreadsheetId()
 
-  const rows = rowsRes.data.values || []
-  return rows
-    .filter((row) => row[0] && row[2])
-    .map((row) => normalizeUserRow(row as string[]))
+    const rowsRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${USERS_SHEET_NAME}!A2:L`,
+    })
+
+    const rows = rowsRes.data.values || []
+    const data = rows
+      .filter((row) => row[0] && row[2])
+      .map((row) => normalizeUserRow(row as string[]))
+    usersCache = {
+      expiresAt: Date.now() + USERS_CACHE_TTL_MS,
+      data,
+    }
+    return data
+  } catch (error) {
+    if (usersCache?.data?.length && isQuotaExceededError(error)) {
+      return usersCache.data
+    }
+    throw error
+  }
 }
 
 export async function findDbUserByEmail(email: string): Promise<DbUser | null> {
@@ -244,6 +282,8 @@ export async function createDbUser(input: {
       ]],
     },
   })
+
+  invalidateUsersCache()
 
   return toPublicUser(newUser)
 }
@@ -360,6 +400,8 @@ export async function updateDbUserById(input: {
     },
   })
 
+  invalidateUsersCache()
+
   return toPublicUser(next)
 }
 
@@ -398,6 +440,8 @@ export async function deactivateDbUserById(id: string): Promise<void> {
       ]],
     },
   })
+
+  invalidateUsersCache()
 }
 
 export async function deleteDbUserById(id: string): Promise<void> {
@@ -433,6 +477,8 @@ export async function deleteDbUserById(id: string): Promise<void> {
       ],
     },
   })
+
+  invalidateUsersCache()
 }
 
 export async function ensurePrincipalSeeded() {

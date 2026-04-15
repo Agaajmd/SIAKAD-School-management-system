@@ -86,10 +86,6 @@ export default function EmployeeProfile() {
     load().catch(() => setIsLoading(false))
   }, [])
 
-  if (isLoading) {
-    return <RouteLoading />
-  }
-
   const employeeSchedule = useMemo(() => allSchedules.filter((s) => s.teacherId === employee.id), [allSchedules, employee.id])
   const uniqueClasses = useMemo(() => [...new Set(employeeSchedule.map((s) => s.classId))], [employeeSchedule])
   const totalHoursPerWeek = useMemo(() => {
@@ -99,6 +95,10 @@ export default function EmployeeProfile() {
       return acc + Math.max(end - start, 0) + 0.5
     }, 0)
   }, [employeeSchedule])
+
+  if (isLoading) {
+    return <RouteLoading />
+  }
 
   const handleEditProfile = () => {
     setEditForm({ name: employee.name, email: employee.email, subject: employee.subject })

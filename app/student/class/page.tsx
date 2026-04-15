@@ -21,19 +21,25 @@ export default function StudentClassPage() {
   const [studentClass, setStudentClass] = useState<any>(null)
   const [classmates, setClassmates] = useState<any[]>([])
   const [teacher, setTeacher] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/student/overview", { cache: "no-store" })
-        if (!res.ok) return
+        if (!res.ok) {
+          throw new Error("Gagal memuat data kelas")
+        }
         const data = await res.json()
         setStudent(data.student || null)
         setStudentClass(data.studentClass || null)
         setClassmates(Array.isArray(data.classmates) ? data.classmates : [])
         setTeacher(data.teacher || null)
       } catch {
-        setStudent(null)
+        setLoadError("Data kelas belum bisa dimuat.")
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -45,11 +51,34 @@ export default function StudentClassPage() {
     return [...classmates].sort((a, b) => b.xp - a.xp).findIndex((s) => s.id === student.id) + 1
   }, [classmates, student])
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
   }
 
-  if (!studentClass) {
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <GlassCard className="p-8 text-center max-w-md">
+            <GraduationCap className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-slate-800">Data siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  const resolvedStudentClass = studentClass || {
+    id: student.classId || "",
+    name: student.classId || "Kelas",
+    grade: "-",
+    rows: 6,
+    cols: 6,
+    teacherId: "",
+  }
+
+  if (!resolvedStudentClass) {
     return (
       <DashboardLayout role="STUDENT" userName={student.name} userAvatar={student.avatar}>
         <div className="flex items-center justify-center min-h-[50vh]">
@@ -92,8 +121,8 @@ export default function StudentClassPage() {
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-bold text-slate-800">{studentClass.name}</h2>
-              <p className="text-sm text-slate-500">Grade {studentClass.grade}</p>
+              <h2 className="text-lg font-bold text-slate-800">{resolvedStudentClass.name}</h2>
+              <p className="text-sm text-slate-500">Grade {resolvedStudentClass.grade}</p>
               {teacher && (
                 <div className="flex items-center gap-2 mt-2">
                   <img 
@@ -154,7 +183,7 @@ export default function StudentClassPage() {
             </div>
           </div>
           <ClassRoomGrid 
-            classroom={studentClass} 
+            classroom={resolvedStudentClass} 
             students={classmates} 
             viewOnly={true}
             highlightStudentId={student.id}

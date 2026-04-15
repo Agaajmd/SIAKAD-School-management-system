@@ -80,6 +80,9 @@ export const setDbActivityPoints = (activityPoints: ActivityPoint[]) => {
 }
 
 export const getDbAttendance = () => db.attendance
+export const setDbAttendance = (attendance: AttendanceRecord[]) => {
+  db.attendance = attendance
+}
 export const getDbGrades = () => db.grades
 export const setDbGrades = (grades: StudentGrade[]) => {
   db.grades = grades

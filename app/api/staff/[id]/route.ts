@@ -10,6 +10,7 @@ import {
   setDbAdmins,
   setDbTeachers,
 } from "@/lib/server/data-store"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -67,7 +68,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const tasks = getDbTasks().filter((task) => task.teacherId === id)
   const taskIds = new Set(tasks.map((task) => task.id))
   const taskSubmissions = getDbTaskSubmissions().filter((submission) => taskIds.has(submission.taskId))
-  const classes = getDbClasses().filter((classRoom) => schedules.some((schedule) => schedule.classId === classRoom.id))
+  const classesFromStore = getDbClasses()
+  const { resolveClassId } = createClassIdResolver(classesFromStore)
+  const scheduleClassIds = new Set(schedules.map((schedule) => resolveClassId(schedule.classId)).filter(Boolean))
+  const classes = classesFromStore.filter((classRoom) => scheduleClassIds.has(classRoom.id))
 
   return NextResponse.json({
     staff: resolvedTeacher,

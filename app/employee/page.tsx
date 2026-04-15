@@ -10,7 +10,8 @@ import type { Student } from "@/lib/data-model"
 
 type Employee = { id: string; name: string; subject: string; classesCount: number; rating: number }
 type Schedule = { id: string; day: string }
-type ClassRoomLite = { id: string }
+type ClassRoomLite = { id: string; name?: string; grade?: string }
+type EmployeeContext = { homeroomClassId?: string; subject?: string; classesCount?: number; rating?: number }
 
 export default function EmployeeDashboard() {
   const [employee, setEmployee] = useState<Employee>({ id: "", name: "", subject: "-", classesCount: 0, rating: 0 })
@@ -24,10 +25,17 @@ export default function EmployeeDashboard() {
     const load = async () => {
       try {
         const res = await fetch("/api/dashboard/employee", { cache: "no-store" })
-        if (!res.ok) return
-        const data = await res.json()
+        const data = res.ok ? await res.json() : {}
         if (!active) return
-        if (data.employee) setEmployee(data.employee)
+        if (data.employee) {
+          setEmployee((prev) => ({
+            ...prev,
+            ...data.employee,
+            subject: String(data.employee.subject || prev.subject || "-"),
+            classesCount: Number(data.employee.classesCount || 0),
+            rating: Number(data.employee.rating || 0),
+          }))
+        }
         if (Array.isArray(data.todayClasses)) setTodayClasses(data.todayClasses)
 
         const contextRes = await fetch("/api/employee/context", { cache: "no-store" })
@@ -35,8 +43,44 @@ export default function EmployeeDashboard() {
         const context = await contextRes.json()
         if (Array.isArray(context.students)) setStudents(context.students)
         if (Array.isArray(context.classes) && context.classes.length > 0) {
-          const firstClass = (context.classes as ClassRoomLite[])[0]
-          if (firstClass?.id) setPrimaryClassId(firstClass.id)
+          const classList = context.classes as ClassRoomLite[]
+          const contextEmployee = (context.employee || {}) as EmployeeContext
+          const preferredClass =
+            (contextEmployee.homeroomClassId
+              ? classList.find((item) => item.id === contextEmployee.homeroomClassId)
+              : null) ||
+            classList[0]
+          if (preferredClass?.id) setPrimaryClassId(preferredClass.id)
+
+          setEmployee((prev) => ({
+            ...prev,
+            subject: String(contextEmployee.subject || prev.subject || "-"),
+            classesCount: Math.max(
+              Number(prev.classesCount || 0),
+              Number(contextEmployee.classesCount || 0),
+              classList.length,
+            ),
+            rating: Number(contextEmployee.rating ?? prev.rating ?? 0),
+          }))
+        }
+
+        if (Array.isArray(context.schedules) && context.schedules.length > 0 && (!Array.isArray(data.todayClasses) || data.todayClasses.length === 0)) {
+          const todayKey = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()).toLowerCase()
+          const todayAliases: Record<string, string[]> = {
+            monday: ["senin", "mon", "sen"],
+            tuesday: ["selasa", "tue", "sel"],
+            wednesday: ["rabu", "wed", "rab"],
+            thursday: ["kamis", "thu", "kam"],
+            friday: ["jumat", "jum'at", "fri", "jum"],
+            saturday: ["sabtu", "sat", "sab"],
+            sunday: ["minggu", "sun", "min"],
+          }
+          const dayKeys = new Set([todayKey, ...(todayAliases[todayKey] || [])])
+          const nextTodayClasses = (context.schedules as Schedule[]).filter((schedule) => {
+            const normalizedDay = String(schedule.day || "").trim().toLowerCase()
+            return dayKeys.has(normalizedDay)
+          })
+          setTodayClasses(nextTodayClasses)
         }
       } catch {
         // Keep fallback values.

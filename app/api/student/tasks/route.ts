@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getSessionUser } from "@/lib/server/session-user"
 import { getDbTaskSubmissions, getDbTasks, setDbTaskSubmissions } from "@/lib/server/data-store"
+import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const users = await getAllDbUsers()
+  const [users, classes] = await Promise.all([getAllDbUsers(), getAllDbClasses()])
+  const { resolveClassId } = createClassIdResolver(classes)
   const sessionUser = await getSessionUser()
-  const students = users.filter((user) => user.role === "STUDENT" && user.isActive)
+  const students = users
+    .filter((user) => user.role === "STUDENT" && user.isActive)
+    .map((user) => ({ ...user, classId: resolveClassId(user.classId) }))
 
   const studentId =
     url.searchParams.get("studentId") ||
@@ -23,7 +28,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Siswa tidak ditemukan" }, { status: 404 })
   }
 
-  const tasks = getDbTasks().filter((task) => task.classId === student.classId)
+  const classId = resolveClassId(student.classId)
+  const tasks = getDbTasks().filter((task) => resolveClassId(task.classId) === classId)
   const submissions = getDbTaskSubmissions().filter((submission) => submission.studentId === studentId)
 
   return NextResponse.json({ student, tasks, submissions })

@@ -121,6 +121,11 @@ export interface StudentGrade {
   subject: string
   teacherId: string
   semester: string
+  assignmentScore?: number
+  practiceScore?: number
+  utsScore?: number
+  uasScore?: number
+  schoolExamScore?: number
   knowledge: number
   skill: number
   attitude: "A" | "B" | "C" | "D"

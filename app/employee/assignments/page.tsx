@@ -64,7 +64,7 @@ const fileToDataUrl = (file: File) =>
 
 export default function EmployeeAssignmentsPage() {
   const [employee, setEmployee] = useState({ id: "", subject: "-" })
-  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([])
+  const [classes, setClasses] = useState<Array<{ id: string; name: string; grade?: string }>>([])
   const [activeTab, setActiveTab] = useState<TabType>("active")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
@@ -73,6 +73,7 @@ export default function EmployeeAssignmentsPage() {
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   const [formData, setFormData] = useState({
     title: "",
@@ -86,38 +87,93 @@ export default function EmployeeAssignmentsPage() {
   })
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
 
+  const getClassLabel = (classRoom: { id: string; name: string; grade?: string }) =>
+    `${classRoom.name}${classRoom.grade ? ` - Grade ${classRoom.grade}` : ""}`
+
   useEffect(() => {
     const load = async () => {
       try {
-        const contextRes = await fetch("/api/employee/context", { cache: "no-store" })
+        let teacherId = ""
+        let resolvedClasses: Array<{ id: string; name: string; grade?: string }> = []
+        const classLookup = new Map<string, { id: string; name: string; grade?: string }>()
+
+        const [contextRes, adminClassesRes] = await Promise.all([
+          fetch("/api/employee/context", { cache: "no-store" }),
+          fetch("/api/admin/classes", { cache: "no-store" }),
+        ])
+
+        if (adminClassesRes.ok) {
+          const adminClassesData = await adminClassesRes.json()
+          const allClasses = Array.isArray(adminClassesData.classes)
+            ? adminClassesData.classes.map((item: any) => ({
+                id: String(item.id || "").trim(),
+                name: String(item.name || item.id || "-").trim(),
+                grade: item.grade ? String(item.grade) : undefined,
+              })).filter((item: any) => item.id)
+            : []
+          for (const classRoom of allClasses) {
+            classLookup.set(classRoom.id, classRoom)
+          }
+          resolvedClasses = allClasses
+        }
+
         if (contextRes.ok) {
           const contextData = await contextRes.json()
           const nextEmployee = contextData.employee || { id: "", subject: "-" }
-          const nextClasses = Array.isArray(contextData.classes) ? contextData.classes : []
+          teacherId = nextEmployee.id || ""
+
+          const contextClasses = Array.isArray(contextData.classes)
+            ? contextData.classes.map((item: any) => {
+                const id = String(item.id || "").trim()
+                const fromLookup = classLookup.get(id)
+                return {
+                  id,
+                  name: String(item.name || fromLookup?.name || id || "-").trim(),
+                  grade: item.grade ? String(item.grade) : fromLookup?.grade,
+                }
+              }).filter((item: any) => item.id)
+            : []
+
+          if (contextClasses.length > 0) {
+            resolvedClasses = contextClasses
+          }
+
           setEmployee(nextEmployee)
-          setClasses(nextClasses)
+          setClasses(resolvedClasses)
           setFormData((prev) => ({
             ...prev,
             subject: nextEmployee.subject || "-",
-            classId: prev.classId || nextClasses[0]?.id || "",
+            classId: prev.classId || resolvedClasses[0]?.id || "",
           }))
         }
 
-        const res = await fetch(`/api/employee/tasks?teacherId=${employee.id}`, { cache: "no-store" })
+        const res = await fetch(`/api/employee/tasks?teacherId=${teacherId}`, { cache: "no-store" })
         if (!res.ok) throw new Error("Gagal memuat tugas")
         const data = await res.json()
         setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
         setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
+        if (resolvedClasses.length === 0 && Array.isArray(data.tasks)) {
+          const classOptions = Array.from(new Set((data.tasks as Task[]).map((task) => task.classId).filter(Boolean))).map((id) => {
+            const fromLookup = classLookup.get(id)
+            return fromLookup || { id, name: id }
+          })
+          if (classOptions.length > 0) {
+            setClasses(classOptions)
+            setFormData((prev) => ({ ...prev, classId: prev.classId || classOptions[0].id }))
+          }
+        }
       } catch {
         toast.error("Gagal memuat data tugas")
+      } finally {
+        setIsLoading(false)
       }
     }
 
     load()
-  }, [employee.id])
+  }, [])
 
   const teacherTasks = useMemo(
-    () => allTasks.filter((task) => task.teacherId === employee.id),
+    () => (employee.id ? allTasks.filter((task) => task.teacherId === employee.id) : allTasks),
     [allTasks, employee.id],
   )
 
@@ -173,6 +229,10 @@ export default function EmployeeAssignmentsPage() {
   const handleCreateOrUpdate = async () => {
     if (!formData.title || !formData.description || !formData.dueDate) {
       toast.error("Harap isi semua field yang diperlukan")
+      return
+    }
+    if (!formData.classId) {
+      toast.error("Pilih kelas terlebih dahulu")
       return
     }
 
@@ -289,18 +349,18 @@ export default function EmployeeAssignmentsPage() {
 
   return (
     <>
-      <div className="max-w-2xl mx-auto space-y-5 px-1">
-        <div className="flex items-center justify-between pb-2">
+      <div className="mx-auto w-full max-w-3xl space-y-5 px-1 sm:px-2">
+        <div className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-800">Kelola Tugas</h1>
             <p className="text-slate-500 text-sm">Buat dan kelola tugas untuk siswa</p>
           </div>
-          <GlassButton onClick={openCreateModal} size="sm">
+          <GlassButton type="button" onClick={openCreateModal} size="sm" className="w-full sm:w-auto justify-center">
             <Plus className="w-4 h-4 mr-1" /> Buat Tugas
           </GlassButton>
         </div>
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -321,19 +381,22 @@ export default function EmployeeAssignmentsPage() {
         </div>
 
         <div className="space-y-3">
-          {getTaskList().length === 0 ? (
+          {isLoading ? (
             <GlassCard className="py-4">
               <EmptySkeleton rows={3} />
-              <div className="text-center pt-2">
-              <GlassButton variant="outline" size="sm" onClick={openCreateModal} className="mt-3">
+            </GlassCard>
+          ) : getTaskList().length === 0 ? (
+            <GlassCard className="p-6 text-center space-y-2">
+              <p className="text-sm text-slate-500">Data tugas belum tersedia</p>
+              <GlassButton type="button" variant="outline" size="sm" onClick={openCreateModal} className="mt-3">
                 <Plus className="w-4 h-4 mr-1" /> Buat Tugas Pertama
               </GlassButton>
-              </div>
             </GlassCard>
           ) : (
             getTaskList().map((task) => {
               const stats = getSubmissionStats(task.id)
-              const className = classes.find((c) => c.id === task.classId)?.name || "Unknown"
+              const classRoom = classes.find((c) => c.id === task.classId)
+              const className = classRoom ? getClassLabel(classRoom) : task.classId || "Unknown"
 
               return (
                 <GlassCard key={task.id}>
@@ -345,7 +408,7 @@ export default function EmployeeAssignmentsPage() {
                       <h3 className="font-medium text-slate-800">{task.title}</h3>
                       <p className="text-sm text-slate-500">{task.subject} • {className}</p>
 
-                      <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-400 sm:flex sm:flex-wrap sm:items-center sm:gap-4">
                         <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(task.dueDate)}</span>
                         <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{stats.submitted}/{stats.total} dikumpulkan</span>
                         <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{stats.graded} dinilai</span>
@@ -366,10 +429,10 @@ export default function EmployeeAssignmentsPage() {
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2 mt-3">
-                        <button onClick={() => handleViewSubmissions(task)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"><Eye className="w-3.5 h-3.5" /> Lihat Submission</button>
-                        <button onClick={() => handleEdit(task)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
-                        <button onClick={() => handleDelete(task)} disabled={isSubmitting} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-60">{isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus</button>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                        <button onClick={() => handleViewSubmissions(task)} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors sm:w-auto sm:justify-start"><Eye className="w-3.5 h-3.5" /> Lihat Submission</button>
+                        <button onClick={() => handleEdit(task)} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors sm:w-auto sm:justify-start"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
+                        <button onClick={() => handleDelete(task)} disabled={isSubmitting} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-60 sm:w-auto sm:justify-start">{isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Hapus</button>
                       </div>
                     </div>
                   </div>
@@ -390,11 +453,12 @@ export default function EmployeeAssignmentsPage() {
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">Deskripsi</label>
             <textarea placeholder="Jelaskan detail tugas..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[100px] resize-none" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1.5 block">Kelas</label>
-              <select value={formData.classId} onChange={(e) => setFormData({ ...formData, classId: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
-                {classes.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+              <select value={formData.classId} onChange={(e) => setFormData({ ...formData, classId: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" disabled={classes.length === 0}>
+                {classes.length === 0 ? <option value="">Belum ada kelas</option> : null}
+                {classes.map((c) => (<option key={c.id} value={c.id}>{getClassLabel(c)}</option>))}
               </select>
             </div>
             <div>
@@ -427,9 +491,9 @@ export default function EmployeeAssignmentsPage() {
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">URL Gambar Tugas (Opsional)</label>
             <input type="url" placeholder="https://.../gambar.jpg" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
           </div>
-          <div className="flex gap-3 pt-2">
-            <button onClick={() => { setShowCreateModal(false); resetForm() }} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Batal</button>
-            <button onClick={handleCreateOrUpdate} disabled={isSubmitting} className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {editingTaskId ? "Simpan Perubahan" : "Buat Tugas"}</button>
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
+            <button type="button" onClick={() => { setShowCreateModal(false); resetForm() }} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Batal</button>
+            <button type="button" onClick={() => { void handleCreateOrUpdate() }} disabled={isSubmitting} className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {editingTaskId ? "Simpan Perubahan" : "Buat Tugas"}</button>
           </div>
         </div>
       </GlassModal>
