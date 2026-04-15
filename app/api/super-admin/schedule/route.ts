@@ -6,7 +6,7 @@ import {
   getDbSchedules,
   getDbTeachers,
   setDbSchedules,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getSessionUser } from "@/lib/server/session-user"
 import { logAudit } from "@/lib/server/audit-log"

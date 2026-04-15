@@ -1,7 +1,7 @@
 "use client"
 
 import { GlassCard } from "@/components/molecules/glass-card"
-import { Trophy, Medal, Award, Flame, TrendingUp } from "lucide-react"
+import { Trophy, Medal, Award, TrendingUp } from "lucide-react"
 import type { Student } from "@/lib/data-model"
 
 interface AttendanceLeaderboardProps {
@@ -15,11 +15,20 @@ const toFiniteNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-// Calculate attendance score based on streak and attendance status
+const getNetPoints = (student: Student) => {
+  const positivePoints = toFiniteNumber((student as any).positivePoints)
+  const negativePoints = toFiniteNumber((student as any).negativePoints)
+  const totalPoints = (student as any).totalPoints ?? (student as any).points
+  if (totalPoints != null) {
+    return toFiniteNumber(totalPoints)
+  }
+  return positivePoints - negativePoints
+}
+
+// Combine total points with attendance bonus for class leaderboard ranking.
 const getAttendanceScore = (student: Student) => {
-  const baseScore = student.attendance === "PRESENT" ? 100 : student.attendance === "SICK" ? 50 : 0
-  const streakBonus = toFiniteNumber(student.streak) * 5
-  return baseScore + streakBonus
+  const attendanceBonus = student.attendance === "PRESENT" ? 20 : student.attendance === "SICK" ? 5 : 0
+  return getNetPoints(student) + attendanceBonus
 }
 
 export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students = [] }: AttendanceLeaderboardProps) => {
@@ -63,7 +72,7 @@ export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students =
       {showTitle && (
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="w-5 h-5 text-blue-500" />
-          <h2 className="text-base font-semibold text-slate-800">Top {limit} Kehadiran</h2>
+          <h2 className="text-base font-semibold text-slate-800">Top {limit} Poin Siswa</h2>
         </div>
       )}
 
@@ -91,10 +100,7 @@ export const AttendanceLeaderboard = ({ limit = 15, showTitle = true, students =
             <div className="flex-1 min-w-0">
               <p className="font-medium text-slate-800 text-sm truncate">{student.name}</p>
               <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                <span className="flex items-center gap-0.5">
-                  <Flame className="w-3 h-3 text-orange-500" />
-                  {toFiniteNumber(student.streak)} streak
-                </span>
+                <span>{getNetPoints(student) >= 0 ? `+${getNetPoints(student)}` : getNetPoints(student)} poin</span>
                 <span>•</span>
                 <span className={`${
                   student.attendance === "PRESENT" ? "text-emerald-600" : 

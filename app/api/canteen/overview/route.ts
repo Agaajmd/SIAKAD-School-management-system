@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAllDbCanteens } from "@/lib/server/google-sheets-canteens"
-import { getDbCanteens, getDbProducts, setDbCanteens } from "@/lib/server/data-store"
+import { getDbCanteens, getDbProducts, setDbCanteens } from "@/lib/server/persistent-store"
 
 export async function GET() {
   const canteensFromSheet = await getAllDbCanteens()

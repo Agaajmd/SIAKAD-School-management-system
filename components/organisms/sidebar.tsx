@@ -37,20 +37,34 @@ interface SidebarProps {
   userAvatar: string
 }
 
+type SidebarNavItem = {
+  href: string
+  icon: typeof Home
+  label: string
+  disabled?: boolean
+  disabledReason?: string
+}
+
 export const Sidebar = ({ role, userName, userAvatar }: SidebarProps) => {
   const pathname = usePathname()
   const { logout } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const profilePath = `/${role.toLowerCase().replace("_", "-")}/profile`
 
-  const getNavItems = () => {
+  const getNavItems = (): SidebarNavItem[] => {
     switch (role) {
       case "STUDENT":
         return [
           { href: "/student", icon: Home, label: "Dashboard" },
           { href: "/student/class", icon: LayoutGrid, label: "Kelas" },
           { href: "/student/assignments", icon: FileText, label: "Tugas" },
-          { href: "/student/report", icon: AlertTriangle, label: "Laporan Aset" },
+          {
+            href: "/student/report",
+            icon: AlertTriangle,
+            label: "Laporan Aset",
+            disabled: true,
+            disabledReason: "Fitur laporan aset sedang dinonaktifkan sementara.",
+          },
           { href: "/student/schedule", icon: Calendar, label: "Jadwal" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
@@ -138,6 +152,24 @@ export const Sidebar = ({ role, userName, userAvatar }: SidebarProps) => {
           {navItems.map((item, index) => {
             const isActive = pathname === item.href
             const Icon = item.icon
+
+            if (item.disabled) {
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => toast.info(item.disabledReason || "Fitur sedang dinonaktifkan")}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 bg-slate-50/80 border border-dashed border-slate-200 cursor-not-allowed"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                  <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
+                    OFF
+                  </span>
+                </button>
+              )
+            }
 
             return (
               <Link

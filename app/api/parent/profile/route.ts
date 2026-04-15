@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
-import { getDbParents, setDbParents } from "@/lib/server/data-store"
+import { getDbParents, setDbParents } from "@/lib/server/persistent-store"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)

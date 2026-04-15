@@ -2,7 +2,6 @@
 
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
-import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { Clock, MapPin, User, Calendar as CalendarIcon, ChevronRight } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
@@ -20,26 +19,35 @@ export default function StudentSchedule() {
   const [schedules, setSchedules] = useState<any[]>([])
   const [teachers, setTeachers] = useState<Record<string, string>>({})
   const [selectedDay, setSelectedDay] = useState("Monday")
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/student/overview", { cache: "no-store" })
-        if (!res.ok) return
+        if (!res.ok) {
+          throw new Error("Gagal memuat jadwal siswa")
+        }
         const data = await res.json()
         setStudent(data.student || null)
         setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
         const nextTeachers: Record<string, string> = {}
+        if (data.teachersById && typeof data.teachersById === "object") {
+          Object.assign(nextTeachers, data.teachersById)
+        }
         if (data.teacher?.id) {
           nextTeachers[data.teacher.id] = data.teacher.name
         }
         setTeachers(nextTeachers)
       } catch {
-        setStudent(null)
+        setLoadError("Jadwal belum bisa dimuat saat ini.")
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    load()
+    void load()
   }, [])
 
   const daySchedule = useMemo(
@@ -50,8 +58,21 @@ export default function StudentSchedule() {
     [schedules, selectedDay],
   )
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto">
+          <GlassCard className="p-8 text-center">
+            <h2 className="text-lg font-semibold text-slate-800">Data siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -83,8 +104,10 @@ export default function StudentSchedule() {
         {/* Schedule List */}
         <div className="space-y-3">
           {daySchedule.length === 0 ? (
-            <GlassCard>
-              <EmptySkeleton rows={3} className="py-4" />
+            <GlassCard className="p-6 text-center space-y-2">
+              <CalendarIcon className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm text-slate-500">Tidak ada jadwal pada hari ini</p>
+              <p className="text-xs text-slate-400">Pilih hari lain atau cek kembali jadwal dari admin.</p>
             </GlassCard>
           ) : (
             daySchedule.map((schedule, index) => {

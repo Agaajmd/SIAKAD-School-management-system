@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSessionUser } from "@/lib/server/session-user"
-import { getDbOrders, setDbOrders } from "@/lib/server/data-store"
+import { getDbOrders, setDbOrders } from "@/lib/server/persistent-store"
 
 type CheckoutItem = {
   productId: string

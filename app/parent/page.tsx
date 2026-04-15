@@ -82,7 +82,6 @@ export default function ParentDashboard() {
 
   const positivePoints = activityPoints.filter(p => p.type === "POSITIVE").reduce((acc, p) => acc + p.points, 0)
   const negativePoints = activityPoints.filter(p => p.type === "NEGATIVE").reduce((acc, p) => acc + Math.abs(p.points), 0)
-  const totalPoints = positivePoints - negativePoints
 
   const averageGrade = grades.length > 0 
     ? Math.round(grades.reduce((acc, g) => acc + g.knowledge, 0) / grades.length)
@@ -128,7 +127,7 @@ export default function ParentDashboard() {
             <img src={selectedChild.avatar} alt={selectedChild.name} className="w-16 h-16 rounded-full object-cover ring-4 ring-white/30" />
             <div className="flex-1 text-white">
               <h2 className="text-xl font-bold">{selectedChild.name}</h2>
-              <p className="text-white/80">{childClass?.name} • Level {selectedChild.level}</p>
+              <p className="text-white/80">{childClass?.name || selectedChild.classId}</p>
               <div className="flex items-center gap-4 mt-2 text-sm">
                 <span className="flex items-center gap-1">
                   <Star className="w-4 h-4 text-yellow-300" />
@@ -158,12 +157,12 @@ export default function ParentDashboard() {
           </GlassCard>
           <GlassCard className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-purple-100">
-                <TrendingUp className="w-5 h-5 text-purple-600" />
+              <div className="p-2.5 rounded-xl bg-green-100">
+                <TrendingUp className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">{totalPoints}</p>
-                <p className="text-xs text-slate-500">Poin Aktivitas</p>
+                <p className="text-2xl font-bold text-emerald-600">+{positivePoints}</p>
+                <p className="text-xs text-slate-500">Poin Positif</p>
               </div>
             </div>
           </GlassCard>
@@ -180,12 +179,12 @@ export default function ParentDashboard() {
           </GlassCard>
           <GlassCard className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-amber-100">
-                <GraduationCap className="w-5 h-5 text-amber-600" />
+              <div className="p-2.5 rounded-xl bg-red-100">
+                <TrendingDown className="w-5 h-5 text-rose-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">{selectedChild.behaviorScore}</p>
-                <p className="text-xs text-slate-500">Skor Perilaku</p>
+                <p className="text-2xl font-bold text-rose-600">-{negativePoints}</p>
+                <p className="text-xs text-slate-500">Poin Negatif</p>
               </div>
             </div>
           </GlassCard>

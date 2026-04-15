@@ -45,6 +45,8 @@ interface NavItem {
   label: string
   activeMatch?: string
   exact?: boolean
+  disabled?: boolean
+  disabledReason?: string
 }
 
 export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigationProps) => {
@@ -112,7 +114,13 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
           { href: "/student", icon: Home, label: "Dashboard" },
           { href: "/student/class", icon: LayoutGrid, label: "Kelas" },
           { href: "/student/assignments", icon: FileText, label: "Tugas" },
-          { href: "/student/report", icon: AlertTriangle, label: "Laporan Aset" },
+          {
+            href: "/student/report",
+            icon: AlertTriangle,
+            label: "Laporan Aset",
+            disabled: true,
+            disabledReason: "Fitur laporan aset sedang dinonaktifkan sementara.",
+          },
           { href: "/student/schedule", icon: Calendar, label: "Jadwal" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },
         ]
@@ -274,6 +282,22 @@ export const BottomNavigation = ({ role, userName, userAvatar }: BottomNavigatio
             {allMenuItems.map((item) => {
               const Icon = item.icon
               const isActive = isRouteActive(item)
+              if (item.disabled) {
+                return (
+                  <button
+                    key={item.href}
+                    type="button"
+                    onClick={() => toast.info(item.disabledReason || "Fitur sedang dinonaktifkan")}
+                    className="relative flex flex-col items-center gap-2 p-3 rounded-2xl bg-slate-100 text-slate-400 border border-dashed border-slate-200"
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-200 text-slate-500">
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-medium text-center leading-tight">{item.label}</span>
+                    <span className="absolute top-1 right-1 text-[9px] font-semibold px-1 py-0.5 rounded bg-slate-300 text-slate-600">OFF</span>
+                  </button>
+                )
+              }
               return (
                 <Link
                   key={item.href}

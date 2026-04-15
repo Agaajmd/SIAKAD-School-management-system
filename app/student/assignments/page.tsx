@@ -5,7 +5,6 @@ import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { RouteLoading } from "@/components/templates/route-loading"
 import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassModal } from "@/components/molecules/glass-modal"
-import { EmptySkeleton } from "@/components/molecules/empty-skeleton"
 import { GlassButton } from "@/components/atoms/glass-button"
 import type { Task, TaskSubmission } from "@/lib/data-model"
 import {
@@ -16,7 +15,6 @@ import {
   Upload,
   Calendar,
   BookOpen,
-  ChevronRight,
   Paperclip,
   Link2,
   Image as ImageIcon,
@@ -34,6 +32,15 @@ const fileToDataUrl = (file: File) =>
     reader.readAsDataURL(file)
   })
 
+const isLikelyImageUrl = (value?: string) => {
+  if (!value) return false
+  const lower = value.toLowerCase()
+  return (
+    lower.startsWith("data:image/") ||
+    /\.(png|jpe?g|webp|gif|svg)(\?|#|$)/.test(lower)
+  )
+}
+
 export default function StudentAssignmentsPage() {
   const [student, setStudent] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<TabType>("pending")
@@ -44,22 +51,28 @@ export default function StudentAssignmentsPage() {
   const [submissionFile, setSubmissionFile] = useState<File | null>(null)
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/student/tasks", { cache: "no-store" })
-        if (!res.ok) return
+        if (!res.ok) {
+          throw new Error("Gagal memuat tugas siswa")
+        }
         const data = await res.json()
         setStudent(data.student || null)
         setAllTasks(Array.isArray(data.tasks) ? data.tasks : [])
         setAllSubmissions(Array.isArray(data.submissions) ? data.submissions : [])
       } catch {
-        setStudent(null)
+        setLoadError("Data tugas belum bisa dimuat.")
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    load()
+    void load()
   }, [])
 
   const classTasks = useMemo(() => allTasks, [allTasks])
@@ -200,8 +213,21 @@ export default function StudentAssignmentsPage() {
     { id: "graded" as TabType, label: "Dinilai", count: gradedTasks.length, icon: CheckCircle2 },
   ]
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="max-w-2xl mx-auto px-1">
+          <GlassCard className="p-8 text-center">
+            <h2 className="text-lg font-semibold text-slate-800">Data siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -212,20 +238,20 @@ export default function StudentAssignmentsPage() {
           <p className="text-slate-500 text-sm">Kelola dan kumpulkan tugas sekolah</p>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="grid grid-cols-3 gap-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
+                "min-w-0 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all",
                 activeTab === tab.id
                   ? "bg-blue-500 text-white shadow-sm"
                   : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50",
               )}
             >
               <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
               <span
                 className={cn(
                   "px-2 py-0.5 rounded-full text-xs",
@@ -240,8 +266,9 @@ export default function StudentAssignmentsPage() {
 
         <div className="space-y-3">
           {getTaskList().length === 0 ? (
-            <GlassCard>
-              <EmptySkeleton rows={3} className="py-4" />
+            <GlassCard className="p-6 text-center space-y-2">
+              <p className="text-sm text-slate-500">Data belum tersedia</p>
+              <p className="text-xs text-slate-400">Belum ada tugas untuk kategori ini.</p>
             </GlassCard>
           ) : (
             getTaskList().map((task) => {
@@ -271,27 +298,25 @@ export default function StudentAssignmentsPage() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h3 className="font-medium text-slate-800 truncate">{task.title}</h3>
-                          <p className="text-sm text-slate-500">{task.subject}</p>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h3 className="font-medium text-slate-800 leading-snug break-words">{task.title}</h3>
+                          <p className="text-xs sm:text-sm text-slate-500 break-words">{task.subject}</p>
                         </div>
                         {submission?.status === "GRADED" && (
-                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg shrink-0">
+                          <span className="inline-flex w-fit px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg shrink-0">
                             {submission.score}/{task.maxScore}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 mt-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2 text-xs">
                         <span className={cn("flex items-center gap-1", overdue ? "text-red-500" : "text-slate-400")}>
                           {overdue ? <AlertCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
                           {formatDate(task.dueDate)}
                         </span>
                       </div>
                     </div>
-
-                    <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
                   </div>
                 </GlassCard>
               )
@@ -311,7 +336,7 @@ export default function StudentAssignmentsPage() {
             <div className="space-y-4">
               <div>
                 <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">{selectedTask.subject}</span>
-                <h3 className="text-xl font-bold text-slate-800 mt-2">{selectedTask.title}</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-800 mt-2 break-words">{selectedTask.title}</h3>
               </div>
 
               <div className="flex items-center gap-4 text-sm">
@@ -329,6 +354,19 @@ export default function StudentAssignmentsPage() {
               {(selectedTask.attachmentUrl || selectedTask.imageUrl) && (
                 <div className="bg-blue-50 rounded-lg p-3 space-y-2">
                   <p className="text-sm font-medium text-blue-700">Lampiran dari Guru</p>
+                  {(() => {
+                    const teacherImageUrl = selectedTask.imageUrl || (isLikelyImageUrl(selectedTask.attachmentUrl) ? selectedTask.attachmentUrl : undefined)
+                    if (!teacherImageUrl) return null
+                    return (
+                      <div className="rounded-xl border border-blue-200 bg-white p-2">
+                        <img
+                          src={teacherImageUrl}
+                          alt={`Lampiran gambar ${selectedTask.title}`}
+                          className="w-full h-auto max-h-[420px] object-contain rounded-lg"
+                        />
+                      </div>
+                    )
+                  })()}
                   <div className="flex flex-wrap gap-2">
                     {selectedTask.attachmentUrl && (
                       <a href={selectedTask.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-blue-600 text-xs font-medium hover:bg-blue-100">

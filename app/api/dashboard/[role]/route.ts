@@ -25,7 +25,7 @@ import {
   getDbTasks,
   getDbTeachers,
   setDbCanteens,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 
 const normalizeId = (value: unknown) => String(value || "").trim().toLowerCase()
 
@@ -75,13 +75,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
             role: "STUDENT" as const,
             classId: resolveClassId(user.classId),
             paymentStatus: "UNPAID" as const,
-            behaviorScore: 100,
+            behaviorScore: 0,
             attendance: "PRESENT" as const,
             seatRow: Number((user as any).seatRow ?? 0),
             seatCol: Number((user as any).seatCol ?? 0),
             coins: 0,
             streak: Number((user as any).streak ?? 0),
-            level: Number((user as any).level ?? 1),
+            level: Number((user as any).level ?? 0),
             xp: Number((user as any).xp ?? 0),
           }))
         const storeStudents = getDbStudents().map((student) => ({ ...student, classId: resolveClassId(student.classId) }))

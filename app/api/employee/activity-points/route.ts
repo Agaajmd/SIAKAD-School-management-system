@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
 import { type ActivityPoint } from "@/lib/data-model"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
-import { getDbActivityPoints, getDbStudents, setDbActivityPoints, setDbStudents } from "@/lib/server/data-store"
+import { getDbActivityPoints, getDbStudents, setDbActivityPoints } from "@/lib/server/persistent-store"
 import { createDbActivityPoint, getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
 import { getSessionUser } from "@/lib/server/session-user"
 import { logAudit } from "@/lib/server/audit-log"
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 export async function POST(request: Request) {
   const payload = (await request.json()) as ActivityPoint
@@ -39,13 +37,13 @@ export async function POST(request: Request) {
           role: "STUDENT",
           classId: user.classId || "",
           paymentStatus: "UNPAID",
-          behaviorScore: 100,
+          behaviorScore: 0,
           attendance: "PRESENT",
           seatRow: 0,
           seatCol: 0,
           coins: 0,
           streak: 0,
-          level: 1,
+          level: 0,
           xp: 0,
         }
         students = [...students.filter((student) => student.id !== user.id), targetStudent]
@@ -83,17 +81,6 @@ export async function POST(request: Request) {
     activityPoints = [...activityPoints, persistedPoint]
   }
   setDbActivityPoints(activityPoints)
-
-  setDbStudents(
-    students.map((student) => {
-      if (student.id !== payload.studentId) return student
-      const nextBehaviorScore = clamp((student.behaviorScore || 100) + normalizedPoints, 0, 200)
-      return {
-        ...student,
-        behaviorScore: nextBehaviorScore,
-      }
-    }),
-  )
 
   logAudit({
     actorId: persistedPoint.givenBy,

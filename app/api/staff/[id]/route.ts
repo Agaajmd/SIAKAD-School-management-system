@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { deleteDbUserById, getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { getAllDbTasks } from "@/lib/server/google-sheets-tasks"
+import { getAllDbTaskSubmissions } from "@/lib/server/google-sheets-task-submissions"
 import {
   getDbAdmins,
   getDbClasses,
@@ -8,8 +10,10 @@ import {
   getDbTaskSubmissions,
   getDbTeachers,
   setDbAdmins,
+  setDbTaskSubmissions,
+  setDbTasks,
   setDbTeachers,
-} from "@/lib/server/data-store"
+} from "@/lib/server/persistent-store"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -18,6 +22,26 @@ const WHATSAPP_REGEX = /^(\+62|62|0)8[1-9][0-9]{7,10}$/
 
 function normalizeWhatsappNumber(raw: string) {
   return raw.trim().replace(/[\s-]/g, "")
+}
+
+async function loadTasksFromSheetOrStore() {
+  try {
+    const tasks = await getAllDbTasks()
+    setDbTasks(tasks)
+    return tasks
+  } catch {
+    return getDbTasks()
+  }
+}
+
+async function loadTaskSubmissionsFromSheetOrStore() {
+  try {
+    const submissions = await getAllDbTaskSubmissions()
+    setDbTaskSubmissions(submissions)
+    return submissions
+  } catch {
+    return getDbTaskSubmissions()
+  }
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -64,10 +88,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     homeroomClassId: undefined,
   }
 
+  const [tasksFromSource, submissionsFromSource] = await Promise.all([
+    loadTasksFromSheetOrStore(),
+    loadTaskSubmissionsFromSheetOrStore(),
+  ])
+
   const schedules = getDbSchedules().filter((schedule) => schedule.teacherId === id)
-  const tasks = getDbTasks().filter((task) => task.teacherId === id)
+  const tasks = tasksFromSource.filter((task) => task.teacherId === id)
   const taskIds = new Set(tasks.map((task) => task.id))
-  const taskSubmissions = getDbTaskSubmissions().filter((submission) => taskIds.has(submission.taskId))
+  const taskSubmissions = submissionsFromSource.filter((submission) => taskIds.has(submission.taskId))
   const classesFromStore = getDbClasses()
   const { resolveClassId } = createClassIdResolver(classesFromStore)
   const scheduleClassIds = new Set(schedules.map((schedule) => resolveClassId(schedule.classId)).filter(Boolean))

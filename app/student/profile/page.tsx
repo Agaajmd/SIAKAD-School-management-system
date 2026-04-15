@@ -25,6 +25,8 @@ import {
 
 export default function StudentProfile() {
   const [student, setStudent] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
@@ -38,9 +40,13 @@ export default function StudentProfile() {
         const session = sessionRes.ok ? await sessionRes.json() : null
         const studentId = session?.user?.id || ""
         const res = await fetch(`/api/student/profile${studentId ? `?studentId=${studentId}` : ""}`, { cache: "no-store" })
-        if (!res.ok) return
+        if (!res.ok) {
+          throw new Error("Gagal memuat profil")
+        }
         const data = await res.json()
-        if (!data.student) return
+        if (!data.student) {
+          throw new Error("Data siswa tidak tersedia")
+        }
         setStudent(data.student)
         setEditForm({
           name: data.student.name || "",
@@ -48,7 +54,10 @@ export default function StudentProfile() {
           phone: data.student.phone || "",
         })
       } catch {
+        setLoadError("Profil belum bisa dimuat.")
         setStudent(null)
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -121,8 +130,22 @@ export default function StudentProfile() {
     reader.readAsDataURL(file)
   }
 
-  if (!student) {
+  if (isLoading) {
     return <RouteLoading />
+  }
+
+  if (!student) {
+    return (
+      <DashboardLayout role="STUDENT" userName="-" userAvatar="/placeholder-user.jpg">
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <GlassCard className="p-8 text-center max-w-md">
+            <User className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-slate-800">Profil siswa tidak tersedia</h2>
+            <p className="text-slate-500 mt-2">{loadError || "Silakan login ulang atau hubungi admin."}</p>
+          </GlassCard>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (

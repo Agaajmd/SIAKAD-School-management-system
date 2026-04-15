@@ -12,7 +12,6 @@ import {
   User,
   Trophy,
   Flame,
-  Star,
   CheckCircle,
   AlertCircle,
   ChevronDown,
@@ -81,7 +80,7 @@ export default function ParentClassPage() {
   const sickCount = classmates.filter(s => s.attendance === "SICK").length
   const alphaCount = classmates.filter(s => s.attendance === "ALPHA").length
   
-  // Top students by level/XP
+  // Top students by XP
   const topStudents = [...classmates]
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5)
@@ -102,6 +101,8 @@ export default function ParentClassPage() {
   
   const attendanceStatus = getAttendanceStatus()
   const AttendanceIcon = attendanceStatus.icon
+  const childPositivePoints = Number((selectedChild as any).positivePoints ?? 0)
+  const childNegativePoints = Number((selectedChild as any).negativePoints ?? 0)
 
   return (
     <DashboardLayout role="PARENT" userName={parent.name} userAvatar={parent.avatar}>
@@ -227,8 +228,8 @@ export default function ParentClassPage() {
             <p className="text-[10px] text-slate-500">Rank Kelas</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
-            <p className="text-xl font-bold text-amber-600">Lv.{selectedChild.level}</p>
-            <p className="text-[10px] text-slate-500">Level</p>
+            <p className="text-xl font-bold text-amber-600">{selectedChild.coins}</p>
+            <p className="text-[10px] text-slate-500">Koin</p>
           </GlassCard>
           <GlassCard className="text-center py-3">
             <p className="text-xl font-bold text-orange-600">{selectedChild.streak}</p>
@@ -251,12 +252,10 @@ export default function ParentClassPage() {
               <h3 className="text-lg font-bold text-slate-800">{seatPosition}</h3>
             </div>
             <div className="text-right">
-              <p className="text-sm text-slate-500">Skor Perilaku</p>
-              <p className={cn(
-                "text-2xl font-bold",
-                selectedChild.behaviorScore >= 80 ? "text-green-600" :
-                selectedChild.behaviorScore >= 60 ? "text-yellow-600" : "text-red-600"
-              )}>{selectedChild.behaviorScore}</p>
+              <p className="text-xs text-slate-500">Poin Positif</p>
+              <p className="text-xl font-bold text-emerald-600">+{childPositivePoints}</p>
+              <p className="text-xs text-slate-500 mt-1">Poin Negatif</p>
+              <p className="text-xl font-bold text-rose-600">-{childNegativePoints}</p>
             </div>
           </div>
         </GlassCard>
@@ -336,10 +335,6 @@ export default function ParentClassPage() {
                     {s.name} {s.id === selectedChild.id && "(Anak Anda)"}
                   </p>
                   <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-500" />
-                      Lv.{s.level}
-                    </span>
                     <span className="flex items-center gap-1">
                       <Flame className="w-3 h-3 text-orange-500" />
                       {s.streak} hari

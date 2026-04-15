@@ -13,6 +13,7 @@ interface ClassRoomGridProps {
   students: Student[]
   onAttendanceChange?: (studentId: string, status: AttendanceStatus) => void
   viewOnly?: boolean
+  allowSeatClickInViewOnly?: boolean
   highlightStudentId?: string
   lockUnpaidSeats?: boolean
 }
@@ -22,6 +23,7 @@ export const ClassRoomGrid = ({
   students,
   onAttendanceChange,
   viewOnly = false,
+  allowSeatClickInViewOnly = false,
   highlightStudentId,
   lockUnpaidSeats = true,
 }: ClassRoomGridProps) => {
@@ -54,7 +56,7 @@ export const ClassRoomGrid = ({
   }
 
   const handleSeatClick = (student: Student) => {
-    if (viewOnly) return
+    if (viewOnly && !allowSeatClickInViewOnly) return
     if (lockUnpaidSeats && student.paymentStatus === "UNPAID") return
     setSelectedStudent(student)
   }
@@ -127,18 +129,17 @@ export const ClassRoomGrid = ({
               />
               <div className="min-w-0">
                 <h4 className="font-semibold text-slate-800 text-sm sm:text-base truncate">{selectedStudent.name}</h4>
-                <p className="text-xs sm:text-sm text-slate-500 truncate">{selectedStudent.email}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl sm:rounded-2xl text-center transition-all duration-300 hover:bg-slate-100">
-                <p className="text-xl sm:text-2xl font-bold text-slate-800">{selectedStudent.behaviorScore}</p>
-                <p className="text-[10px] sm:text-xs text-slate-500">Behavior</p>
+                <p className="text-xl sm:text-2xl font-bold text-emerald-600">+{Number((selectedStudent as any).positivePoints ?? 0)}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500">Poin Positif</p>
               </div>
               <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl sm:rounded-2xl text-center transition-all duration-300 hover:bg-slate-100">
-                <p className="text-xl sm:text-2xl font-bold text-slate-800">{selectedStudent.streak}</p>
-                <p className="text-[10px] sm:text-xs text-slate-500">Streak</p>
+                <p className="text-xl sm:text-2xl font-bold text-rose-600">-{Number((selectedStudent as any).negativePoints ?? 0)}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500">Poin Negatif</p>
               </div>
             </div>
 
