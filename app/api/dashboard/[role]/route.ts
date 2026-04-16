@@ -3,7 +3,9 @@ import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbAssetReports } from "@/lib/server/google-sheets-asset-reports"
+import { loadDbAuditLogsWithMigration } from "@/lib/server/google-sheets-audit-logs"
 import { getAllDbOrdersFromSheet, migrateDbOrdersToSheet } from "@/lib/server/google-sheets-orders"
+import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getAllDbProductsFromSheet } from "@/lib/server/google-sheets-products"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
@@ -28,6 +30,7 @@ import {
   getDbSuperAdmins,
   getDbTasks,
   getDbTeachers,
+  setDbAuditLogs,
   setDbOrders,
   setDbProducts,
 } from "@/lib/server/persistent-store"
@@ -56,6 +59,16 @@ const getTodayDayKeys = () => {
   const todayEnglish = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()).toLowerCase()
   const aliases = DAY_ALIASES[todayEnglish] || []
   return new Set([todayEnglish, ...aliases].map((item) => normalizeDay(item)).filter(Boolean))
+}
+
+async function loadPaymentsFromSheetOrStore() {
+  return loadDbStudentPaymentsWithMigration(getDbPayments())
+}
+
+async function loadAuditLogsFromSheetOrStore() {
+  const logs = await loadDbAuditLogsWithMigration(getDbAuditLogs())
+  setDbAuditLogs(logs)
+  return logs
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ role: string }> }) {
@@ -245,13 +258,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
       }
 
       const paymentsByMonth = new Map<string, { income: number; expenses: number }>()
-      const payments = getDbPayments()
+      const payments = await loadPaymentsFromSheetOrStore()
       const orders = getDbOrders()
       const grades = getDbGrades()
       const attendance = getDbAttendance()
       const teachers = getDbTeachers()
       const tasks = getDbTasks()
-      const auditLogs = getDbAuditLogs()
+      const auditLogs = await loadAuditLogsFromSheetOrStore()
 
       payments.forEach((payment) => {
         const month = String(payment.dueDate || "").slice(0, 7) || "unknown"
@@ -478,10 +491,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
       const children = mergedStudents.filter((student) => childIds.includes(student.id))
       const selectedChildId = url.searchParams.get("childId") || children[0]?.id
       const selectedChild = children.find((item) => item.id === selectedChildId) || children[0] || null
+      const payments = await loadPaymentsFromSheetOrStore()
 
       const data = selectedChild
         ? {
-            payments: getDbPayments().filter((item) => item.studentId === selectedChild.id),
+        payments: payments.filter((item) => item.studentId === selectedChild.id),
             attendance: getDbAttendance().filter((item) => item.studentId === selectedChild.id),
             activityPoints: getDbActivityPoints().filter((item) => item.studentId === selectedChild.id),
             grades: getDbGrades().filter((item) => item.studentId === selectedChild.id),
@@ -491,7 +505,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
               null,
           }
         : {
-            payments: getDbPayments().filter(() => false),
+            payments: [],
             attendance: getDbStudents().filter(() => false),
             activityPoints: getDbActivityPoints().filter(() => false),
             grades: getDbGrades().filter(() => false),

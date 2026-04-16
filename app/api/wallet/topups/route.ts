@@ -4,6 +4,7 @@ import {
   getAllDbWalletTopups,
   type WalletTopupRecord,
 } from "@/lib/server/google-sheets-wallet-topups"
+import { getAllDbOrdersFromSheet, migrateDbOrdersToSheet } from "@/lib/server/google-sheets-orders"
 import { getSessionUser } from "@/lib/server/session-user"
 import { logAudit } from "@/lib/server/audit-log"
 import { getDbOrders, getDbWalletTopups, setDbWalletTopups } from "@/lib/server/persistent-store"
@@ -47,6 +48,24 @@ function loadWalletTopupsFromStore(): WalletTopup[] {
   return getDbWalletTopups()
 }
 
+async function loadOrdersForWalletSpend() {
+  try {
+    const fromSheet = await getAllDbOrdersFromSheet()
+    if (fromSheet.length > 0) {
+      return fromSheet
+    }
+
+    const localOrders = getDbOrders()
+    if (localOrders.length === 0) {
+      return fromSheet
+    }
+
+    return await migrateDbOrdersToSheet(localOrders)
+  } catch {
+    return getDbOrders()
+  }
+}
+
 async function normalizeTopupProofUrl(input: unknown, userId: string) {
   const source = String(input || "").trim()
   if (!source) return undefined
@@ -87,7 +106,8 @@ export async function GET() {
     .filter((item) => item.status === "APPROVED")
     .reduce((acc, item) => acc + Number(item.amount || 0), 0)
 
-  const spentAmount = getDbOrders()
+  const ordersSource = await loadOrdersForWalletSpend()
+  const spentAmount = ordersSource
     .filter((order) => order.customerId === sessionUser.id && order.status !== "CANCELLED")
     .reduce((acc, order) => acc + Number(order.totalAmount || 0), 0)
 

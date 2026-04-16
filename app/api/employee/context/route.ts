@@ -6,6 +6,7 @@ import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbTasks } from "@/lib/server/google-sheets-tasks"
 import { getAllDbTaskSubmissions } from "@/lib/server/google-sheets-task-submissions"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
+import { loadDbPiketSchedulesWithMigration } from "@/lib/server/google-sheets-piket-schedules"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -19,6 +20,7 @@ import {
   getDbTasks,
   getDbTeachers,
   setDbAttendance,
+  setDbPiketSchedules,
   setDbTaskSubmissions,
   setDbTasks,
   setDbSchedules,
@@ -53,14 +55,21 @@ async function loadTaskSubmissionsFromSheetOrStore() {
   }
 }
 
+async function loadPiketSchedulesFromSheetOrStore() {
+  const schedules = await loadDbPiketSchedulesWithMigration(getDbPiketSchedules())
+  setDbPiketSchedules(schedules)
+  return schedules
+}
+
 export async function GET() {
   const sessionUser = await getSessionUser()
-  const [users, classesFromSheet, schedulesFromSheet, tasksFromSource, submissionsFromSource] = await Promise.all([
+  const [users, classesFromSheet, schedulesFromSheet, tasksFromSource, submissionsFromSource, piketSchedulesFromSource] = await Promise.all([
     getAllDbUsers(),
     getAllDbClasses(),
     getAllDbSchedules(),
     loadTasksFromSheetOrStore(),
     loadTaskSubmissionsFromSheetOrStore(),
+    loadPiketSchedulesFromSheetOrStore(),
   ])
   const { resolveClassId } = createClassIdResolver(classesFromSheet)
   setDbSchedules(schedulesFromSheet)
@@ -260,7 +269,7 @@ export async function GET() {
     classes,
     schedules,
     students: seatedStudents,
-    piketSchedules: getDbPiketSchedules(),
+    piketSchedules: piketSchedulesFromSource,
     tasks,
     taskSubmissions,
   })

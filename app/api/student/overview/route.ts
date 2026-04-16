@@ -5,6 +5,7 @@ import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbTasks } from "@/lib/server/google-sheets-tasks"
 import { getAllDbTaskSubmissions } from "@/lib/server/google-sheets-task-submissions"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
+import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -199,10 +200,11 @@ export async function GET(request: Request) {
   const taskSubmissions = (await loadTaskSubmissionsFromSheetOrStore()).filter(
     (submission) => submission.studentId === student.id,
   )
+  const allPayments = await loadDbStudentPaymentsWithMigration(getDbPayments())
   const grades = getDbGrades().filter((grade) => grade.studentId === student.id)
   const activityPoints = allActivityPoints.filter((point) => point.studentId === student.id)
   const attendance = getDbAttendance().filter((record) => record.studentId === student.id)
-  const payments = getDbPayments().filter((payment) => payment.studentId === student.id)
+  const payments = allPayments.filter((payment) => payment.studentId === student.id)
   const reports = getDbStudentReports().filter((report) => report.studentId === student.id)
 
   return NextResponse.json({

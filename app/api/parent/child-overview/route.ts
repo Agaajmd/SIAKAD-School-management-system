@@ -5,6 +5,7 @@ import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-acti
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbGradesFromSheet } from "@/lib/server/google-sheets-grades"
 import { getAllDbAttendanceRecords } from "@/lib/server/google-sheets-attendance"
+import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { resolveParentChildIds } from "@/lib/server/parent-child-links"
@@ -214,6 +215,7 @@ export async function GET(request: Request) {
     ...(pointSummaryByStudentId[child.id] || { positivePoints: 0, negativePoints: 0 }),
   }))
   const allGrades = await loadGrades()
+  const allPayments = await loadDbStudentPaymentsWithMigration(getDbPayments())
   const teacherNameById = new Map(teacherUsers.map((teacher) => [teacher.id, teacher.name]))
   const grades = selectedChild
     ? allGrades
@@ -231,7 +233,7 @@ export async function GET(request: Request) {
   const activityPoints = selectedChild
     ? allActivityPoints.filter((item) => item.studentId === selectedChild.id)
     : []
-  const payments = selectedChild ? getDbPayments().filter((item) => item.studentId === selectedChild.id) : []
+  const payments = selectedChild ? allPayments.filter((item) => item.studentId === selectedChild.id) : []
 
   const parent = {
     id: parentUser.id,

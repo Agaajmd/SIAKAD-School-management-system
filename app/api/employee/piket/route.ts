@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server"
 import type { PiketSchedule } from "@/lib/data-model"
 import { getSessionUser } from "@/lib/server/session-user"
+import {
+  createDbPiketSchedule,
+  deleteDbPiketScheduleById,
+  loadDbPiketSchedulesWithMigration,
+  updateDbPiketScheduleById,
+} from "@/lib/server/google-sheets-piket-schedules"
 import { getDbPiketSchedules, setDbPiketSchedules } from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -9,10 +15,16 @@ async function resolveActorId() {
   return user?.id || "system"
 }
 
+async function loadPiketSchedulesFromSource() {
+  const schedules = await loadDbPiketSchedulesWithMigration(getDbPiketSchedules())
+  setDbPiketSchedules(schedules)
+  return schedules
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const classId = String(url.searchParams.get("classId") || "").trim()
-  const schedules = getDbPiketSchedules().filter((item) => (classId ? item.classId === classId : true))
+  const schedules = (await loadPiketSchedulesFromSource()).filter((item) => (classId ? item.classId === classId : true))
   return NextResponse.json({ schedules })
 }
 
@@ -30,16 +42,24 @@ export async function POST(request: Request) {
     createdBy: payload.createdBy || (await resolveActorId()),
   }
 
-  setDbPiketSchedules([...getDbPiketSchedules(), schedule])
+  let persisted = schedule
+  try {
+    await loadPiketSchedulesFromSource()
+    persisted = await createDbPiketSchedule(schedule)
+  } catch {
+    persisted = schedule
+  }
+
+  setDbPiketSchedules([...getDbPiketSchedules().filter((item) => item.id !== persisted.id), persisted])
   logAudit({
     actorId: await resolveActorId(),
     action: "CREATE",
     entityName: "piket_schedules",
-    entityId: schedule.id,
-    newValue: schedule,
+    entityId: persisted.id,
+    newValue: persisted,
   })
 
-  return NextResponse.json({ schedule }, { status: 201 })
+  return NextResponse.json({ schedule: persisted }, { status: 201 })
 }
 
 export async function PATCH(request: Request) {
@@ -48,7 +68,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "ID jadwal piket wajib diisi" }, { status: 400 })
   }
 
-  const schedules = getDbPiketSchedules()
+  const schedules = await loadPiketSchedulesFromSource()
   const existing = schedules.find((item) => item.id === payload.id)
   if (!existing) {
     return NextResponse.json({ error: "Jadwal piket tidak ditemukan" }, { status: 404 })
@@ -64,17 +84,24 @@ export async function PATCH(request: Request) {
     id: existing.id,
   }
 
-  setDbPiketSchedules(schedules.map((item) => (item.id === existing.id ? updated : item)))
+  let persisted = updated
+  try {
+    persisted = await updateDbPiketScheduleById(updated)
+  } catch {
+    persisted = updated
+  }
+
+  setDbPiketSchedules(schedules.map((item) => (item.id === existing.id ? persisted : item)))
   logAudit({
     actorId: await resolveActorId(),
     action: "UPDATE",
     entityName: "piket_schedules",
-    entityId: updated.id,
+    entityId: persisted.id,
     oldValue: existing,
-    newValue: updated,
+    newValue: persisted,
   })
 
-  return NextResponse.json({ schedule: updated })
+  return NextResponse.json({ schedule: persisted })
 }
 
 export async function DELETE(request: Request) {
@@ -89,10 +116,16 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "ID jadwal piket wajib diisi" }, { status: 400 })
   }
 
-  const schedules = getDbPiketSchedules()
+  const schedules = await loadPiketSchedulesFromSource()
   const existing = schedules.find((item) => item.id === id)
   if (!existing) {
     return NextResponse.json({ error: "Jadwal piket tidak ditemukan" }, { status: 404 })
+  }
+
+  try {
+    await deleteDbPiketScheduleById(id)
+  } catch {
+    // Fallback to local deletion if Sheets is unavailable.
   }
 
   setDbPiketSchedules(schedules.filter((item) => item.id !== id))

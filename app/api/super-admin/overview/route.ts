@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers } from "@/lib/server/google-sheets-auth"
+import { loadDbAuditLogsWithMigration } from "@/lib/server/google-sheets-audit-logs"
+import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getSessionUser } from "@/lib/server/session-user"
 import {
   getDbAttendance,
@@ -11,7 +13,18 @@ import {
   getDbSuperAdmins,
   getDbTasks,
   getDbTeachers,
+  setDbAuditLogs,
 } from "@/lib/server/persistent-store"
+
+async function loadPaymentsFromSheetOrStore() {
+  return loadDbStudentPaymentsWithMigration(getDbPayments())
+}
+
+async function loadAuditLogsFromSheetOrStore() {
+  const logs = await loadDbAuditLogsWithMigration(getDbAuditLogs())
+  setDbAuditLogs(logs)
+  return logs
+}
 
 export async function GET() {
   const users = await getAllDbUsers()
@@ -31,13 +44,13 @@ export async function GET() {
   }
 
   const paymentsByMonth = new Map<string, { income: number; expenses: number }>()
-  const payments = getDbPayments()
+  const payments = await loadPaymentsFromSheetOrStore()
   const orders = getDbOrders()
   const grades = getDbGrades()
   const attendance = getDbAttendance()
   const teachers = getDbTeachers()
   const tasks = getDbTasks()
-  const auditLogs = getDbAuditLogs()
+  const auditLogs = await loadAuditLogsFromSheetOrStore()
 
   payments.forEach((payment) => {
     const month = String(payment.dueDate || "").slice(0, 7) || "unknown"

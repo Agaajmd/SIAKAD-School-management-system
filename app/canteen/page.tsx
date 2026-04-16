@@ -20,6 +20,7 @@ import {
   ChefHat,
   CheckCircle2,
   CircleX,
+  Wallet,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -77,6 +78,12 @@ type CanteenOrderHistory = {
   createdAt: string
   completedAt?: string
   notes?: string
+}
+
+type WalletSummary = {
+  walletBalance: number
+  pendingAmount: number
+  spentAmount: number
 }
 
 interface CartItem extends OrderItem {
@@ -149,9 +156,11 @@ export default function CanteenPage() {
   const [canteens, setCanteens] = useState<Canteen[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [orderHistory, setOrderHistory] = useState<CanteenOrderHistory[]>([])
+  const [walletSummary, setWalletSummary] = useState<WalletSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [walletError, setWalletError] = useState<string | null>(null)
 
   const loadOrderHistory = useCallback(async () => {
     try {
@@ -173,6 +182,33 @@ export default function CanteenPage() {
       setHistoryError(null)
     } catch {
       setHistoryError("Riwayat pesanan belum dapat dimuat")
+    }
+  }, [])
+
+  const loadWalletSummary = useCallback(async () => {
+    try {
+      const res = await fetchWithTimeout("/api/wallet/topups", {
+        cache: "no-store",
+        credentials: "include",
+      })
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        if (res.status !== 401) {
+          setWalletError(String(payload?.error || "Saldo dompet belum tersedia"))
+        }
+        return
+      }
+
+      const payload = await res.json().catch(() => ({}))
+      setWalletSummary({
+        walletBalance: Math.max(0, Number(payload?.walletBalance || 0)),
+        pendingAmount: Math.max(0, Number(payload?.pendingAmount || 0)),
+        spentAmount: Math.max(0, Number(payload?.spentAmount || 0)),
+      })
+      setWalletError(null)
+    } catch {
+      setWalletError("Saldo dompet belum dapat dimuat")
     }
   }, [])
 
@@ -220,14 +256,16 @@ export default function CanteenPage() {
 
   useEffect(() => {
     void loadOrderHistory()
+    void loadWalletSummary()
     const intervalId = window.setInterval(() => {
       void loadOrderHistory()
+      void loadWalletSummary()
     }, 15000)
 
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [loadOrderHistory])
+  }, [loadOrderHistory, loadWalletSummary])
 
   const activeCanteens = useMemo(() => canteens.filter((canteen) => canteen.isOpen), [canteens])
   
@@ -331,6 +369,8 @@ export default function CanteenPage() {
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0) return
     setIsCheckingOut(true)
+    const checkoutTotal = cart.reduce((acc, item) => acc + Number(item.price || 0) * Number(item.quantity || 0), 0)
+
     try {
       const canteenId = cart[0]?.canteenId
       if (!canteenId) {
@@ -396,6 +436,16 @@ export default function CanteenPage() {
         void loadOrderHistory()
       }
 
+      setWalletSummary((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          walletBalance: Math.max(0, prev.walletBalance - checkoutTotal),
+          spentAmount: prev.spentAmount + checkoutTotal,
+        }
+      })
+      void loadWalletSummary()
+
       toast.success("Pesanan berhasil dibuat!", {
         description: "Pembayaran dipotong dari saldo dompet. Cek status pada Riwayat Pesanan.",
       })
@@ -406,7 +456,7 @@ export default function CanteenPage() {
     } finally {
       setIsCheckingOut(false)
     }
-  }, [cart, canteens, clearCart, loadOrderHistory, products])
+  }, [cart, canteens, clearCart, loadOrderHistory, loadWalletSummary, products])
 
   const quantityByProduct = useMemo(() => {
     return cart.reduce<Record<string, number>>((acc, item) => {
@@ -495,6 +545,41 @@ export default function CanteenPage() {
           <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
             {loadError}
           </div>
+        ) : null}
+
+        {walletError ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+            {walletError}
+          </div>
+        ) : null}
+
+        {walletSummary ? (
+          <section className="mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-medium text-emerald-700 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5" /> Saldo Dompet Tersedia
+                </p>
+                <p className="mt-1 text-lg font-bold text-emerald-700">
+                  Rp {walletSummary.walletBalance.toLocaleString("id-ID")}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-xs font-medium text-blue-700">Total Terpakai untuk Pesanan</p>
+                <p className="mt-1 text-lg font-bold text-blue-700">
+                  Rp {walletSummary.spentAmount.toLocaleString("id-ID")}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-medium text-amber-700">Topup Menunggu Konfirmasi</p>
+                <p className="mt-1 text-lg font-bold text-amber-700">
+                  Rp {walletSummary.pendingAmount.toLocaleString("id-ID")}
+                </p>
+              </div>
+            </div>
+          </section>
         ) : null}
 
         {/* Canteen List */}

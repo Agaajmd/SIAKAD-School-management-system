@@ -8,6 +8,7 @@ import {
   getAllDbSchedules,
   updateDbScheduleById,
 } from "@/lib/server/google-sheets-schedules"
+import { loadDbPiketSchedulesWithMigration } from "@/lib/server/google-sheets-piket-schedules"
 import { getSessionUser } from "@/lib/server/session-user"
 import {
   getDbAdmins,
@@ -16,13 +17,21 @@ import {
   getDbSchedules,
   getDbStudents,
   getDbTeachers,
+  setDbPiketSchedules,
   setDbSchedules,
 } from "@/lib/server/persistent-store"
 import { logAudit } from "@/lib/server/audit-log"
 
+async function loadPiketSchedulesFromSheetOrStore() {
+  const schedules = await loadDbPiketSchedulesWithMigration(getDbPiketSchedules())
+  setDbPiketSchedules(schedules)
+  return schedules
+}
+
 export async function GET() {
   const users = await getAllDbUsers()
   const schedulesFromSheet = await getAllDbSchedules()
+  const piketSchedules = await loadPiketSchedulesFromSheetOrStore()
   setDbSchedules(schedulesFromSheet)
   const sessionUser = await getSessionUser()
   const adminFromSession =
@@ -112,7 +121,7 @@ export async function GET() {
     classes,
     teachers,
     students: students.length > 0 ? students : getDbStudents(),
-    piketSchedules: getDbPiketSchedules(),
+    piketSchedules,
   })
 }
 
