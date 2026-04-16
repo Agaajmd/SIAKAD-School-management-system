@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { getDbAuditLogs } from "@/lib/server/persistent-store"
+import { loadDbAuditLogsWithMigration } from "@/lib/server/google-sheets-audit-logs"
+import { getDbAuditLogs, setDbAuditLogs } from "@/lib/server/persistent-store"
 import { getSessionUser } from "@/lib/server/session-user"
 
 export async function GET(request: Request) {
@@ -18,7 +19,10 @@ export async function GET(request: Request) {
   const action = url.searchParams.get("action")
   const limit = Number(url.searchParams.get("limit") || 50)
 
-  const logs = getDbAuditLogs().filter((log) => {
+  const auditLogs = await loadDbAuditLogsWithMigration(getDbAuditLogs())
+  setDbAuditLogs(auditLogs)
+
+  const logs = auditLogs.filter((log) => {
     if (entity && log.entityName !== entity) return false
     if (action && log.action !== action) return false
     return true

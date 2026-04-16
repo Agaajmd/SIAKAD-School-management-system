@@ -1,13 +1,14 @@
 import "server-only"
 
 import { google } from "googleapis"
-import type { JWT, OAuth2Client } from "google-auth-library"
 
 export const GOOGLE_SCOPE_SHEETS = "https://www.googleapis.com/auth/spreadsheets"
 export const GOOGLE_SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
 export const GOOGLE_SCOPE_DRIVE = "https://www.googleapis.com/auth/drive"
 
 export type GoogleDriveAuthMode = "oauth-refresh-token" | "service-account-jwt"
+type GoogleJwtClient = InstanceType<typeof google.auth.JWT>
+type GoogleOAuthClient = InstanceType<typeof google.auth.OAuth2>
 
 type ServiceAccount = {
   client_email: string
@@ -77,7 +78,7 @@ function getDriveOAuthCredentials() {
 
 export async function createGoogleDriveAuth(
   scopes: string[] = [GOOGLE_SCOPE_DRIVE_FILE],
-): Promise<{ auth: OAuth2Client | JWT; mode: GoogleDriveAuthMode }> {
+): Promise<{ auth: GoogleOAuthClient | GoogleJwtClient; mode: GoogleDriveAuthMode }> {
   const oauth = getDriveOAuthCredentials()
   if (oauth) {
     const auth = new google.auth.OAuth2(oauth.clientId, oauth.clientSecret)

@@ -1,4 +1,5 @@
 import { getDbAuditLogs, setDbAuditLogs, type AuditLog } from "@/lib/server/persistent-store"
+import { appendDbAuditLogToSheet } from "@/lib/server/google-sheets-audit-logs"
 
 export type AuditAction = "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "LOGOUT"
 
@@ -25,5 +26,8 @@ export function logAudit(input: LogAuditInput): AuditLog {
   }
 
   setDbAuditLogs([entry, ...logs])
+  void appendDbAuditLogToSheet(entry).catch(() => {
+    // Keep local audit logs as fallback if Sheets is unavailable.
+  })
   return entry
 }

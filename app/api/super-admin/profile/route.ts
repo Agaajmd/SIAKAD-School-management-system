@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth"
+import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getDbClasses, getDbOrders, getDbPayments } from "@/lib/server/persistent-store"
 import { getSessionUser } from "@/lib/server/session-user"
 
@@ -34,7 +35,8 @@ export async function GET(request: Request) {
       }
     : null
 
-  const paidIncome = getDbPayments()
+  const payments = await loadDbStudentPaymentsWithMigration(getDbPayments())
+  const paidIncome = payments
     .filter((item) => item.status === "PAID")
     .reduce((acc, item) => acc + Number(item.amount || 0), 0)
   const totalOrderValue = getDbOrders().reduce((acc, item) => acc + Number(item.totalAmount || 0), 0)
