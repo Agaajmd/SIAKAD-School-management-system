@@ -89,11 +89,40 @@ async function getServiceAccount(): Promise<ServiceAccount> {
 }
 
 function getSpreadsheetId(): string {
-  const spreadsheetId = process.env.GOOGLE_SHEETS_ID
-  if (!spreadsheetId) {
+  const rawSpreadsheetId = String(process.env.GOOGLE_SHEETS_ID || "").trim()
+  if (!rawSpreadsheetId) {
     throw new Error("GOOGLE_SHEETS_ID belum di-set.")
   }
-  return spreadsheetId
+
+  const normalized = rawSpreadsheetId.replace(/^['"]|['"]$/g, "").trim()
+  const directMatch = normalized.match(/^[A-Za-z0-9_-]{15,}$/)
+  if (directMatch) {
+    return directMatch[0]
+  }
+
+  const pathMatch = normalized.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{15,})/i)
+  if (pathMatch?.[1]) {
+    return pathMatch[1]
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsedUrl = new URL(normalized)
+      const queryId = String(parsedUrl.searchParams.get("id") || "").trim()
+      if (/^[A-Za-z0-9_-]{15,}$/.test(queryId)) {
+        return queryId
+      }
+
+      const pathnameMatch = String(parsedUrl.pathname || "").match(/\/d\/([A-Za-z0-9_-]{15,})/i)
+      if (pathnameMatch?.[1]) {
+        return pathnameMatch[1]
+      }
+    } catch {
+      // Continue to explicit validation error below.
+    }
+  }
+
+  throw new Error("GOOGLE_SHEETS_ID tidak valid. Gunakan Spreadsheet ID atau URL Google Sheets yang benar.")
 }
 
 async function getSheetsClient() {
@@ -337,7 +366,7 @@ export async function createDbUser(input: {
   const spreadsheetId = getSpreadsheetId()
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${USERS_SHEET_NAME}!A:L`,
+    range: `${USERS_SHEET_NAME}!A1:L1`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[

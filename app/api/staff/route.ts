@@ -21,6 +21,19 @@ function normalizeWhatsappNumber(raw: string) {
   return raw.trim().replace(/[\s-]/g, "")
 }
 
+function mapStaffApiError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error || "")
+  if (!message) {
+    return fallback
+  }
+
+  if (/did not match the expected pattern/i.test(message)) {
+    return "Konfigurasi Google Sheets tidak valid. Pastikan GOOGLE_SHEETS_ID berisi Spreadsheet ID atau URL sheet yang benar."
+  }
+
+  return message
+}
+
 export async function GET() {
   await ensurePrincipalSeeded()
   const users = await getAllDbUsers()
@@ -109,101 +122,108 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const users = await getAllDbUsers()
-  const body = (await request.json()) as {
-    type?: StaffType
-    name?: string
-    email?: string
-    password?: string
-    phone?: string
-    subject?: string
-  }
+  try {
+    const users = await getAllDbUsers()
+    const body = (await request.json()) as {
+      type?: StaffType
+      name?: string
+      email?: string
+      password?: string
+      phone?: string
+      subject?: string
+    }
 
-  const type = body.type || "teacher"
-  const name = String(body.name || "").trim()
-  const email = String(body.email || "").trim().toLowerCase()
-  const password = String(body.password || "")
-  const phone = normalizeWhatsappNumber(String(body.phone || ""))
-  const subject = String(body.subject || "").trim()
+    const type = body.type || "teacher"
+    const name = String(body.name || "").trim()
+    const email = String(body.email || "").trim().toLowerCase()
+    const password = String(body.password || "")
+    const phone = normalizeWhatsappNumber(String(body.phone || ""))
+    const subject = String(body.subject || "").trim()
 
-  if (!name || !email || !password || !phone) {
-    return NextResponse.json({ error: "Nama, email, password, dan nomor WhatsApp wajib diisi" }, { status: 400 })
-  }
+    if (!name || !email || !password || !phone) {
+      return NextResponse.json({ error: "Nama, email, password, dan nomor WhatsApp wajib diisi" }, { status: 400 })
+    }
 
-  if (!EMAIL_REGEX.test(email)) {
-    return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
-  }
+    if (!EMAIL_REGEX.test(email)) {
+      return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 })
+    }
 
-  if (!WHATSAPP_REGEX.test(phone)) {
-    return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
-  }
+    if (!WHATSAPP_REGEX.test(phone)) {
+      return NextResponse.json({ error: "Format nomor WhatsApp Indonesia tidak valid" }, { status: 400 })
+    }
 
-  if (type === "teacher" && !subject) {
-    return NextResponse.json({ error: "Mata pelajaran guru wajib diisi" }, { status: 400 })
-  }
+    if (type === "teacher" && !subject) {
+      return NextResponse.json({ error: "Mata pelajaran guru wajib diisi" }, { status: 400 })
+    }
 
-  if (users.some((user) => normalizeWhatsappNumber(user.phone || "") === phone)) {
-    return NextResponse.json({ error: "Nomor WhatsApp sudah terdaftar" }, { status: 409 })
-  }
+    if (users.some((user) => normalizeWhatsappNumber(user.phone || "") === phone)) {
+      return NextResponse.json({ error: "Nomor WhatsApp sudah terdaftar" }, { status: 409 })
+    }
 
-  if (password.length < 6) {
-    return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
-  }
+    if (password.length < 6) {
+      return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
+    }
 
-  const createdUser = await createDbUser({
-    name,
-    email,
-    password,
-    phone,
-    subject: type === "teacher" ? subject : undefined,
-    role: type === "teacher" ? "EMPLOYEE" : "ADMIN",
-    avatar: "",
-  })
+    const createdUser = await createDbUser({
+      name,
+      email,
+      password,
+      phone,
+      subject: type === "teacher" ? subject : undefined,
+      role: type === "teacher" ? "EMPLOYEE" : "ADMIN",
+      avatar: "",
+    })
 
-  if (type === "teacher") {
-    const teachers = getDbTeachers()
-    const newTeacher: Employee = {
+    if (type === "teacher") {
+      const teachers = getDbTeachers()
+      const newTeacher: Employee = {
+        id: createdUser.id,
+        name: createdUser.name,
+        email: createdUser.email,
+        phone: createdUser.phone,
+        avatar: createdUser.avatar,
+        role: "EMPLOYEE",
+        subject,
+        rating: 0,
+        classesCount: 0,
+      }
+      setDbTeachers([...teachers, newTeacher])
+      logAudit({
+        actorId: createdUser.id,
+        action: "CREATE",
+        entityName: "staff",
+        entityId: newTeacher.id,
+        oldValue: null,
+        newValue: newTeacher,
+      })
+
+      return NextResponse.json({ staff: newTeacher }, { status: 201 })
+    }
+
+    const admins = getDbAdmins()
+    const newAdmin: User = {
       id: createdUser.id,
       name: createdUser.name,
       email: createdUser.email,
       phone: createdUser.phone,
       avatar: createdUser.avatar,
-      role: "EMPLOYEE",
-      subject,
-      rating: 0,
-      classesCount: 0,
+      role: "ADMIN",
     }
-    setDbTeachers([...teachers, newTeacher])
+    setDbAdmins([...admins, newAdmin])
     logAudit({
       actorId: createdUser.id,
       action: "CREATE",
       entityName: "staff",
-      entityId: newTeacher.id,
+      entityId: newAdmin.id,
       oldValue: null,
-      newValue: newTeacher,
+      newValue: newAdmin,
     })
 
-    return NextResponse.json({ staff: newTeacher }, { status: 201 })
+    return NextResponse.json({ staff: newAdmin }, { status: 201 })
+  } catch (error) {
+    return NextResponse.json(
+      { error: mapStaffApiError(error, "Gagal menambahkan staff") },
+      { status: 500 },
+    )
   }
-
-  const admins = getDbAdmins()
-  const newAdmin: User = {
-    id: createdUser.id,
-    name: createdUser.name,
-    email: createdUser.email,
-    phone: createdUser.phone,
-    avatar: createdUser.avatar,
-    role: "ADMIN",
-  }
-  setDbAdmins([...admins, newAdmin])
-  logAudit({
-    actorId: createdUser.id,
-    action: "CREATE",
-    entityName: "staff",
-    entityId: newAdmin.id,
-    oldValue: null,
-    newValue: newAdmin,
-  })
-
-  return NextResponse.json({ staff: newAdmin }, { status: 201 })
 }
