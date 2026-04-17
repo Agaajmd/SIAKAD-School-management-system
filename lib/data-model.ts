@@ -88,6 +88,7 @@ export interface TaskSubmission {
   taskId: string
   studentId: string
   submittedAt: string
+  studentComment?: string
   attachmentUrl?: string
   attachmentUrls?: string[]
   imageUrl?: string

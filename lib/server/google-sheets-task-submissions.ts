@@ -24,6 +24,7 @@ const SUBMISSIONS_COLUMNS = [
   "feedback",
   "status",
   "updated_at",
+  "student_comment",
 ]
 
 const SUBMISSIONS_CACHE_TTL_MS = 60_000
@@ -167,6 +168,7 @@ function normalizeSubmissionRow(row: string[]): TaskSubmission {
     score: parseScore(row[7]),
     feedback: normalizeMaybeString(row[8]),
     status: normalizeTaskStatus(row[9]),
+    studentComment: normalizeMaybeString(row[11]),
   }
 }
 
@@ -196,6 +198,7 @@ function toSubmissionSheetRow(submission: TaskSubmission, updatedAt: string) {
     submission.feedback || "",
     submission.status,
     updatedAt,
+    submission.studentComment || "",
   ]
 }
 
@@ -252,7 +255,7 @@ async function getRowsWithNumbers(): Promise<SubmissionRow[]> {
 
   const rowsRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${sheetName}!A:K`,
+    range: `${sheetName}!A:L`,
   })
 
   const rows = (rowsRes.data.values || []).map((row) => (Array.isArray(row) ? row.map((cell) => String(cell || "")) : []))
@@ -280,16 +283,16 @@ export async function ensureTaskSubmissionsSheetReady() {
 
   const headerRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${resolution.sheetName}!A1:K1`,
+    range: `${resolution.sheetName}!A1:L1`,
   })
 
   const firstRow = (headerRes.data.values?.[0] || []).map((cell) => String(cell || ""))
-  const shouldWriteHeader = resolution.created || firstRow.length === 0
+  const shouldWriteHeader = resolution.created || firstRow.length !== SUBMISSIONS_COLUMNS.length
 
   if (shouldWriteHeader) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${resolution.sheetName}!A1:K1`,
+      range: `${resolution.sheetName}!A1:L1`,
       valueInputOption: "RAW",
       requestBody: {
         values: [SUBMISSIONS_COLUMNS],
@@ -313,7 +316,7 @@ export async function getAllDbTaskSubmissions(): Promise<TaskSubmission[]> {
 
     const rowsRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:K`,
+      range: `${sheetName}!A:L`,
     })
 
     const rows = (rowsRes.data.values || []).map((row) => (Array.isArray(row) ? row.map((cell) => String(cell || "")) : []))
@@ -373,6 +376,10 @@ export async function upsertDbTaskSubmission(input: TaskSubmission): Promise<Tas
     taskId: String(input.taskId || existingSubmission?.taskId || "").trim(),
     studentId: String(input.studentId || existingSubmission?.studentId || "").trim(),
     submittedAt: input.submittedAt || existingSubmission?.submittedAt || now,
+    studentComment:
+      input.studentComment != null
+        ? String(input.studentComment)
+        : existingSubmission?.studentComment,
     attachmentUrl: safeAttachmentUrls[0],
     attachmentUrls: safeAttachmentUrls.length > 0 ? [...new Set(safeAttachmentUrls)] : undefined,
     imageUrl: safeImageUrls[0],
@@ -395,7 +402,7 @@ export async function upsertDbTaskSubmission(input: TaskSubmission): Promise<Tas
   if (existing) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${sheetName}!A${existing.rowNumber}:K${existing.rowNumber}`,
+      range: `${sheetName}!A${existing.rowNumber}:L${existing.rowNumber}`,
       valueInputOption: "RAW",
       requestBody: {
         values: [toSubmissionSheetRow(next, now)],
@@ -404,7 +411,7 @@ export async function upsertDbTaskSubmission(input: TaskSubmission): Promise<Tas
   } else {
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${sheetName}!A:K`,
+      range: `${sheetName}!A:L`,
       valueInputOption: "RAW",
       requestBody: {
         values: [toSubmissionSheetRow(next, now)],

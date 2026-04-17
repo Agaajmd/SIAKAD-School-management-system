@@ -21,11 +21,17 @@ import {
   Image as ImageIcon,
   Plus,
   Trash2,
+  Download,
+  ZoomIn,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
 type TabType = "pending" | "submitted" | "graded"
+type PendingDeadlineState = "safe" | "warning" | "urgent"
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+const THREE_DAYS_MS = 3 * ONE_DAY_MS
 
 const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -128,6 +134,48 @@ const normalizeSubmissionMediaFields = (submission: TaskSubmission): TaskSubmiss
   }
 }
 
+const sanitizeFileName = (value: string) => {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return normalized || "materi"
+}
+
+const detectImageExtension = (value: string) => {
+  const lower = String(value || "").toLowerCase()
+  if (lower.startsWith("data:image/")) {
+    const mime = lower.replace("data:image/", "").split(";")[0]
+    if (mime === "jpeg") return "jpg"
+    return mime || "png"
+  }
+
+  const extensionMatch = lower.match(/\.(png|jpe?g|webp|gif|svg)(\?|#|$)/)
+  if (!extensionMatch?.[1]) return "png"
+  return extensionMatch[1] === "jpeg" ? "jpg" : extensionMatch[1]
+}
+
+const triggerDownload = (href: string, fileName: string) => {
+  const link = document.createElement("a")
+  link.href = href
+  link.download = fileName
+  link.rel = "noopener noreferrer"
+  link.target = "_blank"
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+const getPendingDeadlineState = (dueDate: string): PendingDeadlineState => {
+  const dueTime = new Date(dueDate).getTime()
+  if (!Number.isFinite(dueTime)) return "safe"
+
+  const diffMs = dueTime - Date.now()
+  if (diffMs <= ONE_DAY_MS) return "urgent"
+  if (diffMs <= THREE_DAYS_MS) return "warning"
+  return "safe"
+}
+
 export default function StudentAssignmentsPage() {
   const [student, setStudent] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<TabType>("pending")
@@ -136,6 +184,8 @@ export default function StudentAssignmentsPage() {
   const [submissionLinks, setSubmissionLinks] = useState<string[]>([""])
   const [submissionImageUrls, setSubmissionImageUrls] = useState<string[]>([""])
   const [submissionFiles, setSubmissionFiles] = useState<File[]>([])
+  const [submissionComment, setSubmissionComment] = useState("")
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null)
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -219,14 +269,29 @@ export default function StudentAssignmentsPage() {
     })
   }
 
-  const isOverdue = (dueDate: string) => {
-    return new Date(dueDate) < new Date()
-  }
-
   const resetSubmissionForm = () => {
     setSubmissionLinks([""])
     setSubmissionImageUrls([""])
     setSubmissionFiles([])
+    setSubmissionComment("")
+  }
+
+  const handleDownloadTeacherImage = async (url: string, index: number) => {
+    const fileBase = sanitizeFileName(selectedTask?.title || "materi")
+    const extension = detectImageExtension(url)
+    const fileName = `${fileBase}-${index + 1}.${extension}`
+
+    try {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error("Download failed")
+
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      triggerDownload(objectUrl, fileName)
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      triggerDownload(url, fileName)
+    }
   }
 
   const previewSelectedFile = (file: File) => {
@@ -242,9 +307,15 @@ export default function StudentAssignmentsPage() {
     if (!selectedTask || !student?.id) return
     const attachmentUrlsFromInput = toUrlList(undefined, submissionLinks)
     const imageUrlsFromInput = toUrlList(undefined, submissionImageUrls)
+    const trimmedComment = submissionComment.trim()
 
-    if (attachmentUrlsFromInput.length === 0 && imageUrlsFromInput.length === 0 && submissionFiles.length === 0) {
-      toast.error("Isi minimal satu: file, link, atau URL gambar")
+    if (
+      attachmentUrlsFromInput.length === 0 &&
+      imageUrlsFromInput.length === 0 &&
+      submissionFiles.length === 0 &&
+      trimmedComment.length === 0
+    ) {
+      toast.error("Isi minimal satu: komentar/jawaban, file, link, atau URL gambar")
       return
     }
 
@@ -291,6 +362,7 @@ export default function StudentAssignmentsPage() {
       body: JSON.stringify({
         studentId: student.id,
         taskId: selectedTask.id,
+        studentComment: trimmedComment || undefined,
         attachmentUrl: attachmentUrls[0],
         attachmentUrls,
         imageUrl: imageUrls[0],
@@ -387,12 +459,18 @@ export default function StudentAssignmentsPage() {
           ) : (
             getTaskList().map((task) => {
               const { submission } = getTaskWithSubmission(task)
-              const overdue = isOverdue(task.dueDate) && !submission
+              const pendingDeadlineState = activeTab === "pending" ? getPendingDeadlineState(task.dueDate) : "safe"
+              const isPendingWarning = activeTab === "pending" && pendingDeadlineState === "warning"
+              const isPendingUrgent = activeTab === "pending" && pendingDeadlineState === "urgent"
 
               return (
                 <GlassCard
                   key={task.id}
-                  className={cn("cursor-pointer hover:shadow-md", overdue && "border-red-200 bg-red-50/50")}
+                  className={cn(
+                    "cursor-pointer hover:shadow-md",
+                    isPendingWarning && "border-amber-200 bg-amber-50/70",
+                    isPendingUrgent && "border-red-200 bg-red-50/60",
+                  )}
                   onClick={() => setSelectedTask(task)}
                 >
                   <div className="flex items-start gap-3">
@@ -403,8 +481,10 @@ export default function StudentAssignmentsPage() {
                           ? "bg-emerald-100 text-emerald-600"
                           : activeTab === "submitted"
                           ? "bg-blue-100 text-blue-600"
-                          : overdue
+                          : isPendingUrgent
                           ? "bg-red-100 text-red-500"
+                          : isPendingWarning
+                          ? "bg-amber-100 text-amber-600"
                           : "bg-slate-100 text-slate-600",
                       )}
                     >
@@ -425,8 +505,17 @@ export default function StudentAssignmentsPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2 text-xs">
-                        <span className={cn("flex items-center gap-1", overdue ? "text-red-500" : "text-slate-400")}>
-                          {overdue ? <AlertCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                        <span
+                          className={cn(
+                            "flex items-center gap-1",
+                            isPendingUrgent
+                              ? "text-red-500"
+                              : isPendingWarning
+                              ? "text-amber-600"
+                              : "text-slate-400",
+                          )}
+                        >
+                          {isPendingUrgent ? <AlertCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
                           {formatDate(task.dueDate)}
                         </span>
                       </div>
@@ -524,7 +613,29 @@ export default function StudentAssignmentsPage() {
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-blue-700/80">Gambar Materi</p>
                         {teacherMedia.materialImageUrls.map((url, index) => (
-                          <div key={`${selectedTask.id}-material-image-${index}`} className="rounded-xl border border-blue-200 bg-white p-2">
+                          <div key={`${selectedTask.id}-material-image-${index}`} className="relative rounded-xl border border-blue-200 bg-white p-2">
+                            <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleDownloadTeacherImage(url, index)
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+                                title="Download gambar"
+                                aria-label="Download gambar"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setZoomImageUrl(url)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+                                title="Zoom gambar"
+                                aria-label="Zoom gambar"
+                              >
+                                <ZoomIn className="w-4 h-4" />
+                              </button>
+                            </div>
                             <img
                               src={url}
                               alt={`Gambar materi ${selectedTask.title} ${index + 1}`}
@@ -562,6 +673,12 @@ export default function StudentAssignmentsPage() {
                         <span className="font-medium text-emerald-700">Nilai</span>
                         <span className="text-2xl font-bold text-emerald-600">{submission.score}/{selectedTask.maxScore}</span>
                       </div>
+                      {submission.studentComment ? (
+                        <div className="mb-2 rounded-lg border border-emerald-200 bg-white/80 p-2">
+                          <p className="text-xs font-medium text-emerald-700 mb-1">Jawaban/Komentar Anda</p>
+                          <p className="text-sm text-emerald-700 whitespace-pre-wrap">{submission.studentComment}</p>
+                        </div>
+                      ) : null}
                       {submission.feedback && <p className="text-sm text-emerald-600">{submission.feedback}</p>}
                     </div>
                   )
@@ -577,6 +694,12 @@ export default function StudentAssignmentsPage() {
                         <span className="font-medium">Tugas Sudah Dikumpulkan</span>
                       </div>
                       <p className="text-sm text-blue-600">Dikumpulkan pada {formatDate(submission.submittedAt)}</p>
+                      {submission.studentComment ? (
+                        <div className="rounded-lg border border-blue-200 bg-white/90 p-2">
+                          <p className="text-xs font-medium text-blue-700 mb-1">Jawaban/Komentar Anda</p>
+                          <p className="text-sm text-blue-700 whitespace-pre-wrap">{submission.studentComment}</p>
+                        </div>
+                      ) : null}
                       {submissionMedia.urlReferenceUrls.length > 0 ? (
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-blue-700/80">Referensi URL:</p>
@@ -716,6 +839,17 @@ export default function StudentAssignmentsPage() {
                 ) : null}
               </div>
 
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1.5 block">Jawaban/Komentar Diketik (Opsional)</label>
+                <textarea
+                  value={submissionComment}
+                  onChange={(e) => setSubmissionComment(e.target.value)}
+                  placeholder="Ketik jawaban atau komentar Anda di sini..."
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[110px] resize-none"
+                />
+                <p className="mt-1 text-xs text-slate-500">Anda bisa mengumpulkan hanya dengan jawaban diketik, tanpa lampiran.</p>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 mb-1.5 block">Link Jawaban (Opsional)</label>
                 {submissionLinks.map((url, index) => (
@@ -799,12 +933,29 @@ export default function StudentAssignmentsPage() {
 
             <div className="flex gap-3 mt-4">
               <GlassButton variant="secondary" onClick={() => setShowUploadModal(false)} className="flex-1 justify-center">Batal</GlassButton>
-              <GlassButton onClick={handleSubmit} className="flex-1 justify-center" disabled={toUrlList(undefined, submissionLinks).length === 0 && toUrlList(undefined, submissionImageUrls).length === 0 && submissionFiles.length === 0}>
+              <GlassButton
+                onClick={handleSubmit}
+                className="flex-1 justify-center"
+                disabled={
+                  toUrlList(undefined, submissionLinks).length === 0 &&
+                  toUrlList(undefined, submissionImageUrls).length === 0 &&
+                  submissionFiles.length === 0 &&
+                  submissionComment.trim().length === 0
+                }
+              >
                 <Paperclip className="w-4 h-4 mr-1.5" /> Kirim
               </GlassButton>
             </div>
           </>
         )}
+      </GlassModal>
+
+      <GlassModal isOpen={!!zoomImageUrl} onClose={() => setZoomImageUrl(null)} title="Zoom Gambar" size="lg">
+        {zoomImageUrl ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <img src={zoomImageUrl} alt="Preview gambar materi" className="w-full h-auto max-h-[75vh] object-contain rounded-lg" />
+          </div>
+        ) : null}
       </GlassModal>
     </DashboardLayout>
   )

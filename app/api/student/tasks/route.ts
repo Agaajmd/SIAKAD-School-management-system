@@ -70,6 +70,8 @@ export async function POST(request: Request) {
   const requestedStudentId = String(body.studentId || "").trim()
   const studentId = sessionUser?.role === "STUDENT" ? sessionUser.id : requestedStudentId
   const taskId = String(body.taskId || "").trim()
+  const hasStudentCommentField = body.studentComment != null
+  const studentComment = hasStudentCommentField ? String(body.studentComment || "").trim() : ""
 
   if (sessionUser?.role === "STUDENT" && requestedStudentId && requestedStudentId !== sessionUser.id) {
     return NextResponse.json({ error: "Tidak diizinkan mengirim tugas untuk siswa lain" }, { status: 403 })
@@ -114,6 +116,20 @@ export async function POST(request: Request) {
     )
   }
 
+  const hasAnswerContent =
+    Boolean(studentComment) ||
+    Boolean(normalizedMedia.attachmentUrl) ||
+    Boolean(normalizedMedia.imageUrl) ||
+    (Array.isArray(normalizedMedia.attachmentUrls) && normalizedMedia.attachmentUrls.length > 0) ||
+    (Array.isArray(normalizedMedia.imageUrls) && normalizedMedia.imageUrls.length > 0)
+
+  if (!hasAnswerContent) {
+    return NextResponse.json(
+      { error: "Isi minimal satu: komentar/jawaban, file, link, atau URL gambar" },
+      { status: 400 },
+    )
+  }
+
   const allSubmissions = await loadTaskSubmissionsFromSheetOrStore()
   const existing = allSubmissions.find((submission) => submission.studentId === studentId && submission.taskId === taskId)
 
@@ -122,6 +138,9 @@ export async function POST(request: Request) {
     taskId,
     studentId,
     submittedAt: new Date().toISOString(),
+    studentComment: hasStudentCommentField
+      ? studentComment || undefined
+      : existing?.studentComment,
     attachmentUrl: normalizedMedia.attachmentUrl,
     attachmentUrls: normalizedMedia.attachmentUrls,
     imageUrl: normalizedMedia.imageUrl,

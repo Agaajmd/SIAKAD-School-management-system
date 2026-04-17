@@ -47,6 +47,7 @@ type TaskSubmission = {
   taskId: string
   studentId: string
   submittedAt: string
+  studentComment?: string
   attachmentUrl?: string
   attachmentUrls?: string[]
   imageUrl?: string
@@ -986,6 +987,12 @@ export default function EmployeeAssignmentsPage() {
                           <button onClick={() => openReviewModal(sub)} className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors">Nilai</button>
                         )}
                       </div>
+                      {sub.studentComment ? (
+                        <div className="text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-2 whitespace-pre-wrap">
+                          <span className="font-medium">Jawaban/Komentar Siswa:</span>
+                          <p className="mt-1 text-sm text-slate-700">{sub.studentComment}</p>
+                        </div>
+                      ) : null}
                       {submissionMedia.urlReferenceUrls.length > 0 ? (
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-blue-700/80">Referensi URL:</p>
@@ -1077,6 +1084,13 @@ export default function EmployeeAssignmentsPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-medium text-slate-800">{studentsById[selectedSubmission.studentId] || "Siswa"}</p>
               <p className="text-xs text-slate-500 mt-1">Dikumpulkan: {formatDate(selectedSubmission.submittedAt)}</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-600 mb-1">Komentar/Jawaban Siswa</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                {selectedSubmission.studentComment || "Siswa tidak mengirim jawaban diketik."}
+              </p>
             </div>
 
             <div>
