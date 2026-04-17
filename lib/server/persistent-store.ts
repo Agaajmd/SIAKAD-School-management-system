@@ -18,6 +18,7 @@ import type {
   User,
   ActivityPoint,
   AttendanceRecord,
+  SppDefault,
   StudentGrade,
   StudentPayment,
   WalletTopup,
@@ -66,6 +67,7 @@ type PersistedDb = {
   attendance: AttendanceRecord[]
   grades: StudentGrade[]
   payments: StudentPayment[]
+  sppDefaults: SppDefault[]
   auditLogs: AuditLog[]
   teachers: Employee[]
   admins: User[]
@@ -142,6 +144,7 @@ const createEmptyDb = (): PersistedDb => ({
   attendance: [],
   grades: [],
   payments: [],
+  sppDefaults: [],
   auditLogs: [],
   teachers: [],
   admins: [],
@@ -175,6 +178,7 @@ function mergeWithDefaults(raw: Partial<PersistedDb> | null | undefined): Persis
     attendance: Array.isArray(raw.attendance) ? raw.attendance : empty.attendance,
     grades: Array.isArray(raw.grades) ? raw.grades : empty.grades,
     payments: Array.isArray(raw.payments) ? raw.payments : empty.payments,
+    sppDefaults: Array.isArray(raw.sppDefaults) ? raw.sppDefaults : empty.sppDefaults,
     auditLogs: Array.isArray(raw.auditLogs) ? raw.auditLogs : empty.auditLogs,
     teachers: Array.isArray(raw.teachers) ? raw.teachers : empty.teachers,
     admins: Array.isArray(raw.admins) ? raw.admins : empty.admins,
@@ -297,6 +301,14 @@ export const setDbGrades = (grades: StudentGrade[]) => {
 }
 
 export const getDbPayments = () => readCollection("payments")
+export const setDbPayments = (payments: StudentPayment[]) => {
+  writeCollection("payments", payments)
+}
+
+export const getDbSppDefaults = () => readCollection("sppDefaults")
+export const setDbSppDefaults = (sppDefaults: SppDefault[]) => {
+  writeCollection("sppDefaults", sppDefaults)
+}
 
 export const getDbAuditLogs = () => readCollection("auditLogs")
 export const setDbAuditLogs = (auditLogs: AuditLog[]) => {

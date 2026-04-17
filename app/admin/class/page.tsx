@@ -9,6 +9,12 @@ import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
 import { GlassInput } from "@/components/atoms/glass-input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/molecules/dropdown-menu"
 import { Edit2, GraduationCap, Loader2, Mail, MessageCircle, MoreVertical, Plus, School, Search, Trash2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -445,29 +451,40 @@ export default function AdminClassManagement() {
             {studentsInActiveClass.map((student) => (
               <div key={student.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0"><p className="font-medium text-slate-800 truncate">{student.name}</p><p className="text-sm text-slate-500 truncate">{student.email}</p><p className="text-sm text-slate-500 truncate">WA: {student.phone || "-"}</p></div>
-                <div className="relative group" onClick={(event) => event.stopPropagation()}>
-                  <button className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
-                    <MoreVertical className="w-4 h-4 text-slate-600" />
-                  </button>
-                  <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                    <button onClick={() => openEditStudentModal(student)} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    asChild
+                    onClick={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    <button className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                      <MoreVertical className="w-4 h-4 text-slate-600" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-56 rounded-xl border border-slate-200 bg-white p-1"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <DropdownMenuItem onClick={() => openEditStudentModal(student)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
                       <Edit2 className="w-4 h-4" />
                       Edit
-                    </button>
-                    <button onClick={() => handleShareStudentAccount(student, "whatsapp")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleShareStudentAccount(student, "whatsapp")} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
                       <MessageCircle className="w-4 h-4" />
                       Kirim Akun via WhatsApp
-                    </button>
-                    <button onClick={() => handleShareStudentAccount(student, "email")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleShareStudentAccount(student, "email")} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
                       <Mail className="w-4 h-4" />
                       Kirim Akun via Email
-                    </button>
-                    <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-slate-50 transition-colors" onClick={() => { setSelectedStudent(student); setShowDeleteStudentModal(true) }}>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="flex items-center gap-2 px-4 py-2 text-sm text-red-500" onClick={() => { setSelectedStudent(student); setShowDeleteStudentModal(true) }}>
                       <Trash2 className="w-4 h-4" />
                       Hapus
-                    </button>
-                  </div>
-                </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
             {studentsInActiveClass.length === 0 && (

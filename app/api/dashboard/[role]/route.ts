@@ -7,6 +7,7 @@ import { loadDbAuditLogsWithMigration } from "@/lib/server/google-sheets-audit-l
 import { getAllDbOrdersFromSheet, migrateDbOrdersToSheet } from "@/lib/server/google-sheets-orders"
 import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
 import { getAllDbProductsFromSheet } from "@/lib/server/google-sheets-products"
+import { loadDbParentChildLinksWithMigration } from "@/lib/server/google-sheets-parent-children"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -410,6 +411,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
       }
 
       const parentMap = getDbParents().find((item) => item.id === parent.id || item.email === parent.email) || null
+      const parentChildLinks = await loadDbParentChildLinksWithMigration(getDbParents())
+      const parentChildLink =
+        parentChildLinks.find(
+          (item) =>
+            String(item.parentId || "").trim().toLowerCase() === String(parent.id || "").trim().toLowerCase() ||
+            String(item.parentEmail || "").trim().toLowerCase() === String(parent.email || "").trim().toLowerCase(),
+        ) || null
+      const parentChildrenIds =
+        (Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+          ? parentChildLink.childrenIds
+          : parentMap?.childrenIds) || []
       type ParentStudentRow = {
         id: string
         name: string
@@ -484,7 +496,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ role
       const childIds = resolveParentChildIds({
         students: mergedStudents,
         classes: classesFromSheet,
-        parentChildrenIds: parentMap?.childrenIds,
+        parentChildrenIds,
         parentRelationField: parent.classId,
         resolveClassId,
       })

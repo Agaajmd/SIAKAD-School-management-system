@@ -9,6 +9,12 @@ import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassModal } from "@/components/molecules/glass-modal"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/molecules/dropdown-menu"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { RouteLoading } from "@/components/templates/route-loading"
 import type { Employee, Schedule, User } from "@/lib/data-model"
@@ -502,42 +508,64 @@ export default function SuperAdminStaff() {
                       {isStaffActive ? "Aktif" : "Nonaktif"}
                     </span>
 
-                    <div className="relative group" onClick={(e) => e.stopPropagation()}>
-                      <button className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
-                        <MoreVertical className="w-4 h-4 text-slate-600" />
-                      </button>
-
-                      <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        asChild
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                      >
+                        <button className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                          <MoreVertical className="w-4 h-4 text-slate-600" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-56 rounded-xl border border-slate-200 bg-white p-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {teacher && (
-                          <button onClick={() => router.push(`/super-admin/staff/${encodeStaffId(staff.id)}`)} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/super-admin/staff/${encodeStaffId(staff.id)}`)}
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700"
+                          >
                             <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             Lihat Detail
-                          </button>
+                          </DropdownMenuItem>
                         )}
-                        <button onClick={() => openEditModal(staff)} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <DropdownMenuItem
+                          onClick={() => openEditModal(staff)}
+                          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700"
+                        >
                           <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           Edit
-                        </button>
-                        <button onClick={() => handleShareAccount(staff, "whatsapp")} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleShareAccount(staff, "whatsapp")}
+                          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700"
+                        >
                           <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           Kirim Akun via WhatsApp
-                        </button>
-                        <button onClick={() => handleShareAccount(staff, "email")} className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleShareAccount(staff, "email")}
+                          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-700"
+                        >
                           <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           Kirim Akun via Email
-                        </button>
-                        <button
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() => {
                             setStaffToDelete(staff)
                             setShowDeleteModal(true)
                           }}
-                          className="flex items-center gap-2 w-full px-3 sm:px-4 py-2 text-xs sm:text-sm text-red-500 hover:bg-slate-50 transition-colors"
+                          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm text-red-500"
                         >
                           <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           Hapus
-                        </button>
-                      </div>
-                    </div>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               )

@@ -27,6 +27,7 @@ import {
   Award,
   Utensils,
   SlidersHorizontal,
+  ReceiptText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
@@ -101,6 +102,7 @@ export const Sidebar = ({ role, userName, userAvatar, featureState }: SidebarPro
         return [
           { href: "/super-admin", icon: Home, label: "Dashboard" },
           { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
+          { href: "/super-admin/spp", icon: ReceiptText, label: "Default SPP" },
           { href: "/super-admin/staff", icon: Users, label: "Manajemen Staff" },
           { href: "/super-admin/features", icon: SlidersHorizontal, label: "Manajemen Fitur" },
           { href: "/canteen", icon: Utensils, label: "Kantin" },

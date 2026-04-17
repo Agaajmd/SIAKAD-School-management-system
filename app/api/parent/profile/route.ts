@@ -3,6 +3,7 @@ import { getAllDbUsers, updateDbUserById } from "@/lib/server/google-sheets-auth
 import { getSessionUser } from "@/lib/server/session-user"
 import { logAudit } from "@/lib/server/audit-log"
 import { getDbParents, setDbParents } from "@/lib/server/persistent-store"
+import { loadDbParentChildLinksWithMigration, upsertDbParentChildLink } from "@/lib/server/google-sheets-parent-children"
 
 export async function GET(request: Request) {
   const sessionUser = await getSessionUser()
@@ -33,6 +34,17 @@ export async function GET(request: Request) {
   }
 
   const parentMap = getDbParents().find((item) => item.id === parentUser.id || item.email === parentUser.email) || null
+  const parentChildLinks = await loadDbParentChildLinksWithMigration(getDbParents())
+  const parentChildLink =
+    parentChildLinks.find(
+      (item) =>
+        String(item.parentId || "").trim().toLowerCase() === String(parentUser.id || "").trim().toLowerCase() ||
+        String(item.parentEmail || "").trim().toLowerCase() === String(parentUser.email || "").trim().toLowerCase(),
+    ) || null
+  const childrenIds =
+    (Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+      ? parentChildLink.childrenIds
+      : parentMap?.childrenIds) || []
   const parent = {
     id: parentUser.id,
     name: parentUser.name,
@@ -40,7 +52,7 @@ export async function GET(request: Request) {
     avatar: parentUser.avatar,
     role: "PARENT" as const,
     phone: parentUser.phone || parentMap?.phone || "",
-    childrenIds: parentMap?.childrenIds || [],
+    childrenIds,
   }
 
   return NextResponse.json({ parent })
@@ -76,6 +88,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Parent tidak ditemukan" }, { status: 404 })
   }
 
+  const parentChildLinks = await loadDbParentChildLinksWithMigration(getDbParents())
+  const parentChildLink =
+    parentChildLinks.find(
+      (item) =>
+        String(item.parentId || "").trim().toLowerCase() === String(targetParentId || "").trim().toLowerCase() ||
+        String(item.parentEmail || "").trim().toLowerCase() === String(targetParent.email || "").trim().toLowerCase(),
+    ) || null
+
   const password = body.password != null ? String(body.password).trim() : ""
   if (password && password.length < 6) {
     return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 })
@@ -101,7 +121,10 @@ export async function PATCH(request: Request) {
   const parents = getDbParents()
   const index = parents.findIndex((item) => item.id === targetParentId || item.email === targetParent.email)
   const oldParent = index >= 0 ? parents[index] : null
-  let childrenIds: string[] = oldParent?.childrenIds || []
+  let childrenIds: string[] =
+    (Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+      ? parentChildLink.childrenIds
+      : oldParent?.childrenIds) || []
 
   if (index >= 0) {
     const nextParents = [...parents]
@@ -138,6 +161,16 @@ export async function PATCH(request: Request) {
     role: "PARENT" as const,
     phone: updatedUser.phone || oldParent?.phone || "",
     childrenIds,
+  }
+
+  try {
+    await upsertDbParentChildLink({
+      parentId: targetParentId,
+      parentEmail: updatedUser.email,
+      childrenIds,
+    })
+  } catch {
+    // Keep profile update responsive even if parent_children sync temporarily fails.
   }
 
   logAudit({

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/templates/dashboard-layout"
 import { GlassCard } from "@/components/molecules/glass-card"
 import type { Parent, StudentPayment, Student } from "@/lib/data-model"
+import { toast } from "sonner"
 import { 
   Wallet, 
   CheckCircle, 
@@ -22,8 +23,11 @@ export default function ParentFinancePage() {
   const [children, setChildren] = useState<Student[]>([])
   const [selectedChild, setSelectedChild] = useState<Student | null>(null)
   const [payments, setPayments] = useState<StudentPayment[]>([])
+  const [sppInfo, setSppInfo] = useState<any>(null)
+  const [isPayingSpp, setIsPayingSpp] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [childClassName, setChildClassName] = useState("")
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -38,6 +42,7 @@ export default function ParentFinancePage() {
         setChildren(data.children || [])
         if (data.selectedChild) setSelectedChild(data.selectedChild)
         setPayments(data.payments || [])
+        setSppInfo(data.sppInfo || null)
         setChildClassName(data.childClass?.name || data.selectedChild?.classId || "-")
       } catch {
         setParent(null)
@@ -45,7 +50,38 @@ export default function ParentFinancePage() {
     }
 
     fetchOverview()
-  }, [selectedChild?.id])
+  }, [selectedChild?.id, reloadKey])
+
+  const handlePaySpp = async () => {
+    if (!selectedChild?.id) return
+    if (!sppInfo?.isConfigured) {
+      toast.error("Default SPP untuk grade anak belum diatur oleh super admin")
+      return
+    }
+
+    setIsPayingSpp(true)
+    try {
+      const res = await fetch("/api/parent/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ childId: selectedChild.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || "Gagal memproses pembayaran SPP")
+
+      if (data?.alreadyPaid) {
+        toast.success("SPP bulan ini sudah lunas")
+      } else {
+        toast.success("Pembayaran SPP berhasil")
+      }
+
+      setReloadKey((prev) => prev + 1)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal memproses pembayaran SPP")
+    } finally {
+      setIsPayingSpp(false)
+    }
+  }
 
   if (!parent || !selectedChild) {
     return <RouteLoading />
@@ -133,6 +169,42 @@ export default function ParentFinancePage() {
             </div>
           </GlassCard>
         </div>
+
+        <GlassCard className="p-4 border-l-4 border-l-indigo-500">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-500">SPP Grade {sppInfo?.grade || "-"}</p>
+              <p className="text-2xl font-bold text-slate-800">Rp {Number(sppInfo?.amount || 0).toLocaleString("id-ID")}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {sppInfo?.isConfigured
+                  ? `Jatuh tempo tiap tanggal ${sppInfo?.dueDay || "-"}`
+                  : "Default SPP belum dikonfigurasi super admin"}
+              </p>
+            </div>
+            <div className="flex flex-col sm:items-end gap-2">
+              <span
+                className={cn(
+                  "text-xs px-2 py-1 rounded-full font-medium",
+                  sppInfo?.status === "PAID"
+                    ? "bg-green-100 text-green-700"
+                    : sppInfo?.isConfigured
+                      ? "bg-red-100 text-red-700"
+                      : "bg-slate-200 text-slate-600",
+                )}
+              >
+                {sppInfo?.status === "PAID" ? "SPP Bulan Ini Lunas" : sppInfo?.isConfigured ? "SPP Bulan Ini Belum Lunas" : "Belum Dikonfigurasi"}
+              </span>
+              <button
+                type="button"
+                onClick={handlePaySpp}
+                disabled={isPayingSpp || !sppInfo?.isConfigured || sppInfo?.status === "PAID"}
+                className="px-4 py-2 rounded-xl bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isPayingSpp ? "Memproses..." : sppInfo?.status === "PAID" ? "Sudah Dibayar" : "Bayar SPP Sekarang"}
+              </button>
+            </div>
+          </div>
+        </GlassCard>
 
         {/* Filter */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2">

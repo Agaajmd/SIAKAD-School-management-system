@@ -6,6 +6,7 @@ import { getAllDbTasks } from "@/lib/server/google-sheets-tasks"
 import { getAllDbTaskSubmissions } from "@/lib/server/google-sheets-task-submissions"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
 import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
+import { loadDbPiketSchedulesWithMigration } from "@/lib/server/google-sheets-piket-schedules"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { assignStudentSeatsToClasses } from "@/lib/server/class-seat-layout"
@@ -15,11 +16,13 @@ import {
   getDbClasses,
   getDbGrades,
   getDbPayments,
+  getDbPiketSchedules,
   getDbSchedules,
   getDbStudentReports,
   getDbTaskSubmissions,
   getDbTasks,
   getDbStudents,
+  setDbPiketSchedules,
   setDbTaskSubmissions,
   setDbTasks,
   type StudentReport,
@@ -50,6 +53,16 @@ async function loadTaskSubmissionsFromSheetOrStore() {
     return submissions
   } catch {
     return getDbTaskSubmissions()
+  }
+}
+
+async function loadPiketSchedulesFromSheetOrStore() {
+  try {
+    const piketSchedules = await loadDbPiketSchedulesWithMigration(getDbPiketSchedules())
+    setDbPiketSchedules(piketSchedules)
+    return piketSchedules
+  } catch {
+    return getDbPiketSchedules()
   }
 }
 
@@ -132,15 +145,21 @@ export async function GET(request: Request) {
     .map((item) => ({ ...item, classId: resolveClassId(item.classId) }))
     .filter((item) => item.classId === classId)
 
-  const teachersById = schedules.reduce((acc, schedule) => {
-    if (!acc[schedule.teacherId]) {
-      const teacherInfo = teachers.find((item) => item.id === schedule.teacherId)
-      if (teacherInfo?.name) {
-        acc[schedule.teacherId] = teacherInfo.name
-      }
+  const teachersById = teachers.reduce((acc, teacherItem) => {
+    if (teacherItem.id && teacherItem.name) {
+      acc[teacherItem.id] = teacherItem.name
     }
     return acc
   }, {} as Record<string, string>)
+
+  const allPiketSchedules = await loadPiketSchedulesFromSheetOrStore()
+  const teacherPiketSchedules = allPiketSchedules
+    .filter((item) => Boolean(item.teacherId))
+    .map((item) => ({
+      id: item.id,
+      day: item.day,
+      teacherId: item.teacherId || "",
+    }))
 
   const nextClass = schedules[0] || null
   const teacherRaw = nextClass ? teachers.find((item) => item.id === nextClass.teacherId) || null : null
@@ -216,6 +235,7 @@ export async function GET(request: Request) {
     studentPointSummary,
     pointSummaryByStudentId,
     teachersById,
+    teacherPiketSchedules,
     schedules,
     tasks,
     taskSubmissions,

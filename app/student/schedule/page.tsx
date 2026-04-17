@@ -12,11 +12,24 @@ const dayMap = [
   { id: "Wednesday", label: "Rabu" },
   { id: "Thursday", label: "Kamis" },
   { id: "Friday", label: "Jumat" },
+  { id: "Saturday", label: "Sabtu" },
 ]
+
+const dayAliases: Record<string, string[]> = {
+  monday: ["monday", "senin", "mon", "sen"],
+  tuesday: ["tuesday", "selasa", "tue", "sel"],
+  wednesday: ["wednesday", "rabu", "wed", "rab"],
+  thursday: ["thursday", "kamis", "thu", "kam"],
+  friday: ["friday", "jumat", "jum'at", "fri", "jum"],
+  saturday: ["saturday", "sabtu", "sat", "sab"],
+}
+
+const normalizeDay = (value: unknown) => String(value || "").trim().toLowerCase()
 
 export default function StudentSchedule() {
   const [student, setStudent] = useState<any>(null)
   const [schedules, setSchedules] = useState<any[]>([])
+  const [teacherPiketSchedules, setTeacherPiketSchedules] = useState<any[]>([])
   const [teachers, setTeachers] = useState<Record<string, string>>({})
   const [selectedDay, setSelectedDay] = useState("Monday")
   const [isLoading, setIsLoading] = useState(true)
@@ -32,6 +45,7 @@ export default function StudentSchedule() {
         const data = await res.json()
         setStudent(data.student || null)
         setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
+        setTeacherPiketSchedules(Array.isArray(data.teacherPiketSchedules) ? data.teacherPiketSchedules : [])
         const nextTeachers: Record<string, string> = {}
         if (data.teachersById && typeof data.teachersById === "object") {
           Object.assign(nextTeachers, data.teachersById)
@@ -51,12 +65,19 @@ export default function StudentSchedule() {
   }, [])
 
   const daySchedule = useMemo(
-    () =>
-      schedules
-        .filter((s) => s.day === selectedDay)
-        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    () => {
+      const selectedAliases = new Set(dayAliases[normalizeDay(selectedDay)] || [])
+      return schedules
+        .filter((schedule) => selectedAliases.has(normalizeDay(schedule.day)))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+    },
     [schedules, selectedDay],
   )
+
+  const dayTeacherPiket = useMemo(() => {
+    const selectedAliases = new Set(dayAliases[normalizeDay(selectedDay)] || [])
+    return teacherPiketSchedules.filter((item) => selectedAliases.has(normalizeDay(item.day)))
+  }, [teacherPiketSchedules, selectedDay])
 
   if (isLoading) {
     return <RouteLoading />
@@ -100,6 +121,21 @@ export default function StudentSchedule() {
             </button>
           ))}
         </div>
+
+        <GlassCard>
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">Guru Piket {dayMap.find((day) => day.id === selectedDay)?.label}</h2>
+          {dayTeacherPiket.length === 0 ? (
+            <p className="text-sm text-slate-500">Belum ada guru piket untuk hari ini.</p>
+          ) : (
+            <div className="space-y-2">
+              {dayTeacherPiket.map((item) => (
+                <div key={item.id} className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  {teachers[item.teacherId] || "Guru"}
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
 
         {/* Schedule List */}
         <div className="space-y-3">

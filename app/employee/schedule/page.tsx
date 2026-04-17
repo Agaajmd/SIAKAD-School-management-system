@@ -8,8 +8,21 @@ import { Clock, MapPin, Users, ChevronLeft, ChevronRight } from "lucide-react"
 type Employee = { id: string; name: string }
 type Schedule = { id: string; classId: string; teacherId: string; day: string; subject: string; startTime: string; endTime: string; room: string }
 type ClassRoom = { id: string; name: string; rows: number; cols: number }
+type TeacherInfo = { id: string; name: string; avatar?: string }
+type TeacherPiketSchedule = { id: string; day: string; teacherId: string }
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+const DAY_ALIASES: Record<string, string[]> = {
+  monday: ["monday", "senin", "mon", "sen"],
+  tuesday: ["tuesday", "selasa", "tue", "sel"],
+  wednesday: ["wednesday", "rabu", "wed", "rab"],
+  thursday: ["thursday", "kamis", "thu", "kam"],
+  friday: ["friday", "jumat", "jum'at", "fri", "jum"],
+  saturday: ["saturday", "sabtu", "sat", "sab"],
+}
+
+const normalizeDay = (value: unknown) => String(value || "").trim().toLowerCase()
 
 export default function EmployeeSchedule() {
   const [employee, setEmployee] = useState<Employee>({ id: "", name: "" })
@@ -17,6 +30,8 @@ export default function EmployeeSchedule() {
   const [selectedDay, setSelectedDay] = useState("Monday")
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [classes, setClasses] = useState<ClassRoom[]>([])
+  const [teacherPiketSchedules, setTeacherPiketSchedules] = useState<TeacherPiketSchedule[]>([])
+  const [teachers, setTeachers] = useState<TeacherInfo[]>([])
 
   useEffect(() => {
     const load = async () => {
@@ -27,6 +42,8 @@ export default function EmployeeSchedule() {
         setEmployee(data.employee || { id: "", name: "" })
         setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
         setClasses(Array.isArray(data.classes) ? data.classes : [])
+        setTeacherPiketSchedules(Array.isArray(data.teacherPiketSchedules) ? data.teacherPiketSchedules : [])
+        setTeachers(Array.isArray(data.teachers) ? data.teachers : [])
       } finally {
         setIsLoading(false)
       }
@@ -35,7 +52,17 @@ export default function EmployeeSchedule() {
   }, [])
 
   const employeeSchedule = useMemo(() => schedules.filter((s) => s.teacherId === employee.id), [schedules, employee.id])
-  const todaySchedule = useMemo(() => employeeSchedule.filter((s) => s.day === selectedDay), [employeeSchedule, selectedDay])
+  const todaySchedule = useMemo(() => {
+    const selectedAliases = new Set(DAY_ALIASES[normalizeDay(selectedDay)] || [])
+    return employeeSchedule.filter((schedule) => selectedAliases.has(normalizeDay(schedule.day)))
+  }, [employeeSchedule, selectedDay])
+  const todayTeacherPiket = useMemo(
+    () => {
+      const selectedAliases = new Set(DAY_ALIASES[normalizeDay(selectedDay)] || [])
+      return teacherPiketSchedules.filter((item) => selectedAliases.has(normalizeDay(item.day)))
+    },
+    [teacherPiketSchedules, selectedDay],
+  )
 
   if (isLoading) {
     return <RouteLoading />
@@ -48,6 +75,7 @@ export default function EmployeeSchedule() {
   }
 
   const getClassInfo = (classId: string) => classes.find((c) => c.id === classId)
+  const getTeacherName = (teacherId: string) => teachers.find((teacher) => teacher.id === teacherId)?.name || "Guru"
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
@@ -66,6 +94,27 @@ export default function EmployeeSchedule() {
           ))}
         </div>
         <button type="button" onClick={() => navigateDay("next")} disabled={currentDayIndex === DAYS.length - 1} className="p-2 rounded-xl bg-slate-100 disabled:opacity-30 hover:bg-slate-200 transition-colors shrink-0"><ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" /></button>
+      </GlassCard>
+
+      <GlassCard>
+        <h2 className="text-base sm:text-lg font-semibold text-slate-800 mb-3">Guru Piket {selectedDay}</h2>
+        {todayTeacherPiket.length === 0 ? (
+          <p className="text-sm text-slate-500">Belum ada guru piket terjadwal.</p>
+        ) : (
+          <div className="space-y-2">
+            {todayTeacherPiket.map((item) => {
+              const isCurrentTeacher = item.teacherId === employee.id
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-xl border px-3 py-2 text-sm ${isCurrentTeacher ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-700"}`}
+                >
+                  {isCurrentTeacher ? "Anda bertugas piket hari ini" : getTeacherName(item.teacherId)}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </GlassCard>
 
       <div className="space-y-3 sm:space-y-4">
@@ -98,9 +147,10 @@ export default function EmployeeSchedule() {
 
       <GlassCard>
         <h2 className="text-base sm:text-lg font-semibold text-slate-800 mb-3 sm:mb-4">Weekly Overview</h2>
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
           {DAYS.map((day) => {
-            const dayClasses = employeeSchedule.filter((s) => s.day === day)
+            const selectedAliases = new Set(DAY_ALIASES[normalizeDay(day)] || [])
+            const dayClasses = employeeSchedule.filter((schedule) => selectedAliases.has(normalizeDay(schedule.day)))
             return (
               <button type="button" key={day} onClick={() => setSelectedDay(day)} className={`p-2 sm:p-3 rounded-xl text-center cursor-pointer transition-all w-full ${selectedDay === day ? "bg-gradient-to-b from-purple-100 to-pink-100 border border-purple-300" : "bg-slate-50 hover:bg-slate-100"}`}>
                 <p className="text-[10px] sm:text-xs text-slate-500 mb-0.5 sm:mb-1">{day.slice(0, 3)}</p>

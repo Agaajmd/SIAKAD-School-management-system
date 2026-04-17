@@ -3,6 +3,11 @@ import { createDbUser, deleteDbUserById, getAllDbUsers, updateDbUserById } from 
 import { getAllDbClasses } from "@/lib/server/google-sheets-classes"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
 import { getDbParents, getDbStudents, setDbParents } from "@/lib/server/persistent-store"
+import {
+  deleteDbParentChildLinkByParentIdentity,
+  loadDbParentChildLinksWithMigration,
+  upsertDbParentChildLink,
+} from "@/lib/server/google-sheets-parent-children"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { logAudit } from "@/lib/server/audit-log"
 
@@ -165,10 +170,16 @@ export async function GET(request: Request) {
   }
 
   const parentStore = getDbParents()
+  const parentChildLinks = await loadDbParentChildLinksWithMigration(parentStore)
   const parentStoreByIdentity = new Map<string, (typeof parentStore)[number]>()
   for (const parent of parentStore) {
     parentStoreByIdentity.set(normalizeId(parent.id), parent)
     parentStoreByIdentity.set(normalizeId(parent.email), parent)
+  }
+  const parentChildLinkByIdentity = new Map<string, (typeof parentChildLinks)[number]>()
+  for (const link of parentChildLinks) {
+    parentChildLinkByIdentity.set(normalizeId(link.parentId), link)
+    parentChildLinkByIdentity.set(normalizeId(link.parentEmail), link)
   }
 
   const resolveChildIds = (input: {
@@ -240,9 +251,14 @@ export async function GET(request: Request) {
     .map((user) => {
       const parentMap =
         parentStoreByIdentity.get(normalizeId(user.id)) || parentStoreByIdentity.get(normalizeId(user.email)) || null
+      const parentChildLink =
+        parentChildLinkByIdentity.get(normalizeId(user.id)) || parentChildLinkByIdentity.get(normalizeId(user.email)) || null
 
       const mappedChildIds = resolveChildIds({
-        storeChildIds: parentMap?.childrenIds,
+        storeChildIds:
+          Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+            ? parentChildLink.childrenIds
+            : parentMap?.childrenIds,
         relationField: user.classId,
       }).filter((childId) => studentIds.has(childId))
 
@@ -287,8 +303,15 @@ export async function GET(request: Request) {
         ),
     )
     .map((parent) => {
+      const parentChildLink =
+        parentChildLinkByIdentity.get(normalizeId(parent.id)) ||
+        parentChildLinkByIdentity.get(normalizeId(parent.email)) ||
+        null
       const mappedChildIds = resolveChildIds({
-        storeChildIds: parent.childrenIds,
+        storeChildIds:
+          Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+            ? parentChildLink.childrenIds
+            : parent.childrenIds,
       }).filter((childId) => studentIds.has(childId))
 
       if (mappedChildIds.length === 0) {
@@ -382,6 +405,15 @@ export async function POST(request: Request) {
     ),
     next,
   ])
+  try {
+    await upsertDbParentChildLink({
+      parentId: user.id,
+      parentEmail: user.email,
+      childrenIds: [childId],
+    })
+  } catch {
+    // Keep parent creation responsive even if parent_children sync temporarily fails.
+  }
   logAudit({
     actorId: user.id,
     action: "CREATE",
@@ -411,17 +443,26 @@ export async function PATCH(request: Request) {
   }
 
   const parents = getDbParents()
+  const parentChildLinks = await loadDbParentChildLinksWithMigration(parents)
   const target = parents.find((item) => item.id === id)
   if (!target) {
     return NextResponse.json({ error: "Orang tua tidak ditemukan" }, { status: 404 })
   }
+  const parentChildLink =
+    parentChildLinks.find(
+      (item) => normalizeId(item.parentId) === normalizeId(id) || normalizeId(item.parentEmail) === normalizeId(target.email),
+    ) || null
+  const targetChildrenIds =
+    (Array.isArray(parentChildLink?.childrenIds) && parentChildLink.childrenIds.length > 0
+      ? parentChildLink.childrenIds
+      : target.childrenIds) || []
 
   if (body.childId || classId) {
     const [users, classes] = await Promise.all([getAllDbUsers(), getAllDbClasses()])
     const { resolveClassId } = createClassIdResolver(classes)
     const normalizedClassId = resolveClassId(classId)
     const hasClassFilter = Boolean(normalizedClassId && classes.some((item) => item.id === normalizedClassId))
-    const targetChildId = String(body.childId || target.childrenIds[0] || "").trim()
+    const targetChildId = String(body.childId || targetChildrenIds[0] || "").trim()
     const child = users.find((user) => user.id === targetChildId && user.role === "STUDENT")
     if (!child) {
       return NextResponse.json({ error: "Data anak tidak ditemukan" }, { status: 404 })
@@ -437,7 +478,7 @@ export async function PATCH(request: Request) {
     email: body.email ? String(body.email) : undefined,
     phone: body.phone ? String(body.phone) : undefined,
     password: body.password ? String(body.password) : undefined,
-    classId: body.childId ? String(body.childId) : String(target.childrenIds[0] || "") || undefined,
+    classId: body.childId ? String(body.childId) : String(targetChildrenIds[0] || "") || undefined,
   })
 
   const next = {
@@ -445,10 +486,19 @@ export async function PATCH(request: Request) {
     name: body.name ? String(body.name) : target.name,
     email: body.email ? String(body.email) : target.email,
     phone: body.phone ? String(body.phone) : target.phone,
-    childrenIds: body.childId ? [String(body.childId)] : target.childrenIds,
+    childrenIds: body.childId ? [String(body.childId)] : targetChildrenIds,
   }
 
   setDbParents(parents.map((item) => (item.id === id ? next : item)))
+  try {
+    await upsertDbParentChildLink({
+      parentId: id,
+      parentEmail: next.email,
+      childrenIds: next.childrenIds,
+    })
+  } catch {
+    // Keep parent update responsive even if parent_children sync temporarily fails.
+  }
   logAudit({
     actorId: id,
     action: "UPDATE",
@@ -479,6 +529,11 @@ export async function DELETE(request: Request) {
   }
 
   setDbParents(parents.filter((item) => item.id !== id))
+  try {
+    await deleteDbParentChildLinkByParentIdentity({ parentId: id, parentEmail: target.email })
+  } catch {
+    // Keep parent deletion responsive even if parent_children sync temporarily fails.
+  }
   await deleteDbUserById(id)
   logAudit({
     actorId: id,

@@ -55,12 +55,40 @@ async function getServiceAccount(): Promise<ServiceAccount> {
 }
 
 function getSpreadsheetId() {
-  const spreadsheetId = process.env.GOOGLE_SHEETS_ID
-  if (!spreadsheetId) {
+  const rawSpreadsheetId = String(process.env.GOOGLE_SHEETS_ID || "").trim()
+  if (!rawSpreadsheetId) {
     throw new Error("GOOGLE_SHEETS_ID belum di-set.")
   }
 
-  return spreadsheetId
+  const normalized = rawSpreadsheetId.replace(/^['\"]|['\"]$/g, "").trim()
+  const directMatch = normalized.match(/^[A-Za-z0-9_-]{15,}$/)
+  if (directMatch) {
+    return directMatch[0]
+  }
+
+  const pathMatch = normalized.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{15,})/i)
+  if (pathMatch?.[1]) {
+    return pathMatch[1]
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsedUrl = new URL(normalized)
+      const queryId = String(parsedUrl.searchParams.get("id") || "").trim()
+      if (/^[A-Za-z0-9_-]{15,}$/.test(queryId)) {
+        return queryId
+      }
+
+      const pathnameMatch = String(parsedUrl.pathname || "").match(/\/d\/([A-Za-z0-9_-]{15,})/i)
+      if (pathnameMatch?.[1]) {
+        return pathnameMatch[1]
+      }
+    } catch {
+      // Continue to explicit validation error below.
+    }
+  }
+
+  throw new Error("GOOGLE_SHEETS_ID tidak valid. Gunakan Spreadsheet ID atau URL Google Sheets yang benar.")
 }
 
 async function getSheetsClient() {
@@ -153,6 +181,31 @@ function invalidateStudentPaymentsCache() {
   studentPaymentsCache = null
 }
 
+async function replaceAllDbStudentPaymentsInSheet(payments: StudentPayment[]) {
+  await ensureStudentPaymentsSheetReady()
+  const sheets = await getSheetsClient()
+  const spreadsheetId = getSpreadsheetId()
+
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `${studentPaymentsSheetName}!A2:J`,
+  })
+
+  if (payments.length > 0) {
+    const updatedAt = new Date().toISOString()
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${studentPaymentsSheetName}!A2:J${payments.length + 1}`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: payments.map((payment) => toStudentPaymentSheetRow(payment, updatedAt)),
+      },
+    })
+  }
+
+  invalidateStudentPaymentsCache()
+}
+
 export async function ensureStudentPaymentsSheetReady() {
   if (Date.now() - studentPaymentsSheetReadyAt < STUDENT_PAYMENTS_READY_TTL_MS) {
     return
@@ -238,6 +291,69 @@ export async function getAllDbStudentPaymentsFromSheet(): Promise<StudentPayment
   return data
 }
 
+export async function createDbStudentPayment(input: StudentPayment): Promise<StudentPayment> {
+  const next = normalizeStudentPayment(input)
+  if (!next.studentId) {
+    throw new Error("Student ID wajib diisi")
+  }
+
+  await ensureStudentPaymentsSheetReady()
+  const sheets = await getSheetsClient()
+  const spreadsheetId = getSpreadsheetId()
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${studentPaymentsSheetName}!A1:J1`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [toStudentPaymentSheetRow(next, new Date().toISOString())],
+    },
+  })
+
+  invalidateStudentPaymentsCache()
+  return next
+}
+
+export async function updateDbStudentPaymentById(input: Partial<StudentPayment> & { id: string }) {
+  const id = String(input.id || "").trim()
+  if (!id) {
+    throw new Error("ID pembayaran wajib diisi")
+  }
+
+  const payments = await getAllDbStudentPaymentsFromSheet()
+  const existing = payments.find((item) => item.id === id)
+  if (!existing) {
+    throw new Error("Pembayaran tidak ditemukan")
+  }
+
+  const next = normalizeStudentPayment({
+    ...existing,
+    ...input,
+    id: existing.id,
+  })
+  if (!next.studentId) {
+    throw new Error("Student ID wajib diisi")
+  }
+
+  await replaceAllDbStudentPaymentsInSheet(payments.map((item) => (item.id === existing.id ? next : item)))
+  return next
+}
+
+export async function deleteDbStudentPaymentById(id: string) {
+  const normalizedId = String(id || "").trim()
+  if (!normalizedId) {
+    throw new Error("ID pembayaran wajib diisi")
+  }
+
+  const payments = await getAllDbStudentPaymentsFromSheet()
+  const existing = payments.find((item) => item.id === normalizedId)
+  if (!existing) {
+    throw new Error("Pembayaran tidak ditemukan")
+  }
+
+  await replaceAllDbStudentPaymentsInSheet(payments.filter((item) => item.id !== normalizedId))
+}
+
 export async function migrateDbStudentPaymentsToSheet(sourcePayments: StudentPayment[]) {
   const candidates = Array.isArray(sourcePayments) ? sourcePayments : []
   if (candidates.length === 0) {
@@ -261,7 +377,7 @@ export async function migrateDbStudentPaymentsToSheet(sourcePayments: StudentPay
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${studentPaymentsSheetName}!A:J`,
+    range: `${studentPaymentsSheetName}!A1:J1`,
     valueInputOption: "RAW",
     requestBody: {
       values: missing.map((payment) => toStudentPaymentSheetRow(payment, updatedAt)),

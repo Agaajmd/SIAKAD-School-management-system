@@ -103,6 +103,7 @@ export interface PiketSchedule {
   classId: string
   day: string
   studentIds: string[]
+  teacherId?: string
   createdBy: string
 }
 
@@ -172,6 +173,14 @@ export interface StudentPayment {
   paidDate?: string
   status: PaymentStatus
   semester: string
+}
+
+export interface SppDefault {
+  id: string
+  grade: string
+  amount: number
+  dueDay: number
+  isActive: boolean
 }
 
 export interface AttendanceRecord {

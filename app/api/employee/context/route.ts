@@ -195,6 +195,14 @@ export async function GET() {
     (student) => Boolean(student.classId) && classIds.has(student.classId),
   )
 
+  const teacherDirectory = users
+    .filter((user) => user.role === "EMPLOYEE" && user.isActive)
+    .map((user) => ({
+      id: user.id,
+      name: user.name,
+      avatar: normalizeDriveMediaUrl(user.avatar) || "",
+    }))
+
   let attendanceRecords = getDbAttendance()
   try {
     attendanceRecords = await getAllDbAttendanceRecords()
@@ -263,13 +271,17 @@ export async function GET() {
   const tasks = employeeId ? tasksFromSource.filter((task) => sameId(task.teacherId, employeeId)) : []
   const taskIds = new Set(tasks.map((task) => task.id))
   const taskSubmissions = submissionsFromSource.filter((submission) => taskIds.has(submission.taskId))
+  const teacherPiketSchedules = piketSchedulesFromSource.filter((item) => Boolean(item.teacherId))
+  const studentPiketSchedules = piketSchedulesFromSource.filter((item) => !item.teacherId)
 
   return NextResponse.json({
     employee,
     classes,
     schedules,
     students: seatedStudents,
-    piketSchedules: piketSchedulesFromSource,
+    teachers: teacherDirectory,
+    piketSchedules: studentPiketSchedules,
+    teacherPiketSchedules,
     tasks,
     taskSubmissions,
   })

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { deleteDbUserById, getAllDbUsers } from "@/lib/server/google-sheets-auth"
 import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-activity-points"
+import {
+  deleteDbParentChildLinkByParentIdentity,
+  removeChildFromAllDbParentChildLinks,
+} from "@/lib/server/google-sheets-parent-children"
 import { getSessionUser } from "@/lib/server/session-user"
 import { normalizeDriveMediaUrl } from "@/lib/google-drive"
 import {
@@ -103,6 +107,22 @@ export async function DELETE(request: Request) {
   }
 
   await deleteDbUserById(id)
+
+  if (target.role === "PARENT") {
+    try {
+      await deleteDbParentChildLinkByParentIdentity({ parentId: target.id, parentEmail: target.email })
+    } catch {
+      // Keep account deletion responsive even if parent_children sync temporarily fails.
+    }
+  }
+
+  if (target.role === "STUDENT") {
+    try {
+      await removeChildFromAllDbParentChildLinks(target.id)
+    } catch {
+      // Keep account deletion responsive even if parent_children sync temporarily fails.
+    }
+  }
 
   setDbStudents(getDbStudents().filter((item) => item.id !== id))
   setDbTeachers(getDbTeachers().filter((item) => item.id !== id))

@@ -25,6 +25,7 @@ import {
   QrCode,
   Store,
   SlidersHorizontal,
+  ReceiptText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
@@ -95,6 +96,7 @@ export const BottomNavigation = ({ role, userName, userAvatar, featureState }: B
       case "SUPER_ADMIN":
         return [
           { href: "/super-admin", icon: Home, label: "Home", exact: true },
+          { href: "/super-admin/spp", icon: ReceiptText, label: "SPP" },
           { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
           { href: "/super-admin/staff", icon: Users, label: "Staff", activeMatch: "/super-admin/staff" },
           { href: "/super-admin/features", icon: SlidersHorizontal, label: "Fitur" },
@@ -155,6 +157,7 @@ export const BottomNavigation = ({ role, userName, userAvatar, featureState }: B
       case "SUPER_ADMIN":
         return [
           { href: "/super-admin", icon: Home, label: "Dashboard" },
+          { href: "/super-admin/spp", icon: ReceiptText, label: "Default SPP" },
           { href: "/super-admin/finance", icon: BarChart3, label: "Keuangan" },
           { href: "/super-admin/staff", icon: Users, label: "Manajemen Staff", activeMatch: "/super-admin/staff" },
           { href: "/super-admin/features", icon: SlidersHorizontal, label: "Manajemen Fitur" },

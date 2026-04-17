@@ -15,6 +15,7 @@ const dayMap = [
   { id: "Wednesday", label: "Rabu" },
   { id: "Thursday", label: "Kamis" },
   { id: "Friday", label: "Jumat" },
+  { id: "Saturday", label: "Sabtu" },
 ]
 
 const dayAliases: Record<string, string[]> = {
@@ -23,6 +24,7 @@ const dayAliases: Record<string, string[]> = {
   wednesday: ["wednesday", "rabu", "wed", "rab"],
   thursday: ["thursday", "kamis", "thu", "kam"],
   friday: ["friday", "jumat", "jum'at", "fri", "jum"],
+  saturday: ["saturday", "sabtu", "sat", "sab"],
 }
 
 const normalizeDay = (value: unknown) => String(value || "").trim().toLowerCase()
@@ -33,6 +35,7 @@ export default function ParentSchedule() {
   const [selectedChild, setSelectedChild] = useState<Student | null>(null)
   const [childClass, setChildClass] = useState<any>(null)
   const [schedules, setSchedules] = useState<any[]>([])
+  const [teacherPiketSchedules, setTeacherPiketSchedules] = useState<any[]>([])
   const [teachers, setTeachers] = useState<any[]>([])
   const [selectedDay, setSelectedDay] = useState("Monday")
 
@@ -49,6 +52,7 @@ export default function ParentSchedule() {
       }
       setChildClass(data.childClass || null)
       setSchedules(Array.isArray(data.schedules) ? data.schedules : [])
+      setTeacherPiketSchedules(Array.isArray(data.teacherPiketSchedules) ? data.teacherPiketSchedules : [])
       setTeachers(Array.isArray(data.teachers) ? data.teachers : [])
     }
 
@@ -64,6 +68,11 @@ export default function ParentSchedule() {
     },
     [schedules, selectedDay],
   )
+
+  const dayTeacherPiket = useMemo(() => {
+    const selectedAliases = new Set(dayAliases[normalizeDay(selectedDay)] || [])
+    return teacherPiketSchedules.filter((item) => selectedAliases.has(normalizeDay(item.day)))
+  }, [teacherPiketSchedules, selectedDay])
 
   if (!parent || !selectedChild) {
     return <RouteLoading />
@@ -138,6 +147,24 @@ export default function ParentSchedule() {
         </div>
 
         {/* Schedule List */}
+        <GlassCard>
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">Guru Piket {dayMap.find((d) => d.id === selectedDay)?.label}</h2>
+          {dayTeacherPiket.length === 0 ? (
+            <p className="text-sm text-slate-500">Belum ada guru piket untuk hari ini.</p>
+          ) : (
+            <div className="space-y-2">
+              {dayTeacherPiket.map((item) => {
+                const teacher = teachers.find((teacherItem) => teacherItem.id === item.teacherId)
+                return (
+                  <div key={item.id} className="rounded-lg border border-pink-100 bg-pink-50 px-3 py-2 text-sm text-pink-700">
+                    {teacher?.name || "Guru"}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </GlassCard>
+
         <div className="space-y-3">
           {daySchedule.length === 0 ? (
             <GlassCard>

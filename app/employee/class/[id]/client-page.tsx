@@ -10,6 +10,12 @@ import { GlassCard } from "@/components/molecules/glass-card"
 import { GlassButton } from "@/components/atoms/glass-button"
 import { GlassInput } from "@/components/atoms/glass-input"
 import { GlassModal } from "@/components/molecules/glass-modal"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/molecules/dropdown-menu"
 import { ClassRoomGrid } from "@/components/organisms/class-room-grid"
 
 type ParentAccount = {
@@ -465,26 +471,39 @@ export default function EmployeeClassDetailClient({ id }: EmployeeClassDetailCli
                 <p className="text-sm text-slate-500">WA: {parent.phone || "-"}</p>
                 <p className="text-sm text-slate-600">Anak: {parent.childName}</p>
               </div>
-              <div className="relative group" onClick={(e) => e.stopPropagation()}>
-                <button type="button" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
-                  <MoreVertical className="w-4 h-4 text-slate-600" />
-                </button>
-                <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                  <button type="button" onClick={() => openEdit(parent)} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit</button>
-                  <button type="button" onClick={() => handleShareParentAccount(parent, "whatsapp")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  asChild
+                  onClick={(e) => {
+                    e.stopPropagation()
+                  }}
+                >
+                  <button type="button" className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                    <MoreVertical className="w-4 h-4 text-slate-600" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 rounded-xl border border-slate-200 bg-white p-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem onClick={() => openEdit(parent)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShareParentAccount(parent, "whatsapp")} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
                     <MessageCircle className="w-4 h-4" />
                     Kirim Akun via WhatsApp
-                  </button>
-                  <button type="button" onClick={() => handleShareParentAccount(parent, "email")} className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShareParentAccount(parent, "email")} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700">
                     <Mail className="w-4 h-4" />
                     Kirim Akun via Email
-                  </button>
-                  <button type="button" className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-slate-50 transition-colors" onClick={() => { setSelectedParent(parent); setShowDeleteModal(true) }}>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex items-center gap-2 px-4 py-2 text-sm text-red-500" onClick={() => { setSelectedParent(parent); setShowDeleteModal(true) }}>
                     <Trash2 className="w-4 h-4" />
                     Hapus
-                  </button>
-                </div>
-              </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ))}
           {parents.length === 0 && (

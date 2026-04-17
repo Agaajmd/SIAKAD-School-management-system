@@ -5,7 +5,10 @@ import { getAllDbActivityPointsFromSheet } from "@/lib/server/google-sheets-acti
 import { getAllDbSchedules } from "@/lib/server/google-sheets-schedules"
 import { getAllDbGradesFromSheet } from "@/lib/server/google-sheets-grades"
 import { getAllDbAttendanceRecords } from "@/lib/server/google-sheets-attendance"
-import { loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
+import { loadDbSppDefaultsWithMigration } from "@/lib/server/google-sheets-spp-defaults"
+import { createDbStudentPayment, loadDbStudentPaymentsWithMigration } from "@/lib/server/google-sheets-student-payments"
+import { loadDbPiketSchedulesWithMigration } from "@/lib/server/google-sheets-piket-schedules"
+import { loadDbParentChildLinksWithMigration } from "@/lib/server/google-sheets-parent-children"
 import { getSessionUser } from "@/lib/server/session-user"
 import { createClassIdResolver } from "@/lib/server/class-id-resolver"
 import { resolveParentChildIds } from "@/lib/server/parent-child-links"
@@ -16,8 +19,13 @@ import {
   getDbGrades,
   getDbParents,
   getDbPayments,
+  getDbPiketSchedules,
+  getDbSppDefaults,
   getDbSchedules,
   getDbStudents,
+  setDbPayments,
+  setDbPiketSchedules,
+  setDbSppDefaults,
 } from "@/lib/server/persistent-store"
 
 async function loadActivityPointsFromSheet() {
@@ -52,6 +60,44 @@ async function loadAttendance() {
   }
 }
 
+async function loadPiketSchedules() {
+  try {
+    const piketSchedules = await loadDbPiketSchedulesWithMigration(getDbPiketSchedules())
+    setDbPiketSchedules(piketSchedules)
+    return piketSchedules
+  } catch {
+    return getDbPiketSchedules()
+  }
+}
+
+function normalizeGrade(value: unknown) {
+  return String(value || "").trim().toUpperCase()
+}
+
+function getCurrentPeriodKey(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  return `${year}-${month}`
+}
+
+function buildDueDate(periodKey: string, dueDay: number) {
+  const [yearValue, monthValue] = String(periodKey || "").split("-")
+  const year = Number(yearValue)
+  const month = Number(monthValue)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return new Date().toISOString()
+  }
+
+  const maxDay = new Date(year, month, 0).getDate()
+  const day = Math.max(1, Math.min(Number(dueDay) || 10, maxDay))
+  return new Date(year, month - 1, day).toISOString()
+}
+
+function buildSppDescription(grade: string, date = new Date()) {
+  const monthLabel = date.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
+  return `SPP Grade ${grade} - ${monthLabel}`
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const sessionUser = await getSessionUser()
@@ -84,6 +130,17 @@ export async function GET(request: Request) {
   }
 
   const parentMap = getDbParents().find((item) => item.id === parentUser.id || item.email === parentUser.email) || null
+  const parentChildLinks = await loadDbParentChildLinksWithMigration(getDbParents())
+  const parentChildLink =
+    parentChildLinks.find(
+      (item) =>
+        String(item.parentId || "").trim().toLowerCase() === String(parentUser.id || "").trim().toLowerCase() ||
+        String(item.parentEmail || "").trim().toLowerCase() === String(parentUser.email || "").trim().toLowerCase(),
+    ) || null
+  const parentChildrenIds =
+    (Array.isArray(parentChildLink?.childrenIds) && parentChildLink?.childrenIds.length > 0
+      ? parentChildLink.childrenIds
+      : parentMap?.childrenIds) || []
   type ParentStudentRow = {
     id: string
     name: string
@@ -166,7 +223,7 @@ export async function GET(request: Request) {
   const childIds = resolveParentChildIds({
     students,
     classes,
-    parentChildrenIds: parentMap?.childrenIds,
+    parentChildrenIds,
     parentRelationField: parentUser.classId,
     resolveClassId,
   })
@@ -183,6 +240,14 @@ export async function GET(request: Request) {
   const schedules = selectedChild
     ? allSchedules.filter((schedule) => resolveClassId(schedule.classId) === resolveClassId(selectedChild.classId))
     : []
+  const allPiketSchedules = await loadPiketSchedules()
+  const teacherPiketSchedules = allPiketSchedules
+    .filter((item) => Boolean(item.teacherId))
+    .map((item) => ({
+      id: item.id,
+      day: item.day,
+      teacherId: item.teacherId || "",
+    }))
   const classmates = selectedChild
     ? students.filter((student) => resolveClassId(student.classId) === resolveClassId(selectedChild.classId))
     : []
@@ -215,7 +280,9 @@ export async function GET(request: Request) {
     ...(pointSummaryByStudentId[child.id] || { positivePoints: 0, negativePoints: 0 }),
   }))
   const allGrades = await loadGrades()
-  const allPayments = await loadDbStudentPaymentsWithMigration(getDbPayments())
+  const sppDefaults = await loadDbSppDefaultsWithMigration(getDbSppDefaults())
+  setDbSppDefaults(sppDefaults)
+  let allPayments = await loadDbStudentPaymentsWithMigration(getDbPayments())
   const teacherNameById = new Map(teacherUsers.map((teacher) => [teacher.id, teacher.name]))
   const grades = selectedChild
     ? allGrades
@@ -225,7 +292,13 @@ export async function GET(request: Request) {
           teacherName: teacherNameById.get(grade.teacherId) || "Guru",
         }))
     : []
-  const teacherIds = [...new Set([...grades.map((grade) => grade.teacherId), ...schedules.map((schedule) => schedule.teacherId)])]
+  const teacherIds = [
+    ...new Set([
+      ...grades.map((grade) => grade.teacherId),
+      ...schedules.map((schedule) => schedule.teacherId),
+      ...teacherPiketSchedules.map((item) => item.teacherId),
+    ]),
+  ]
   const teachers = teacherUsers.filter((teacher) => teacherIds.includes(teacher.id))
 
   const allAttendance = await loadAttendance()
@@ -233,7 +306,52 @@ export async function GET(request: Request) {
   const activityPoints = selectedChild
     ? allActivityPoints.filter((item) => item.studentId === selectedChild.id)
     : []
+
+  const selectedGrade = normalizeGrade(childClass?.grade)
+  const currentPeriodKey = getCurrentPeriodKey()
+  const currentSppDefault = selectedChild
+    ? sppDefaults.find((item) => item.isActive && normalizeGrade(item.grade) === selectedGrade) || null
+    : null
+  let currentSppPayment = selectedChild
+    ? allPayments.find(
+        (item) => item.studentId === selectedChild.id && item.type === "SPP" && item.semester === currentPeriodKey,
+      ) || null
+    : null
+
+  if (selectedChild && currentSppDefault && !currentSppPayment) {
+    try {
+      const createdSppPayment = await createDbStudentPayment({
+        id: `pay-spp-${selectedChild.id}-${Date.now()}`,
+        studentId: selectedChild.id,
+        type: "SPP",
+        description: buildSppDescription(selectedGrade),
+        amount: currentSppDefault.amount,
+        dueDate: buildDueDate(currentPeriodKey, currentSppDefault.dueDay),
+        paidDate: undefined,
+        status: "UNPAID",
+        semester: currentPeriodKey,
+      })
+
+      allPayments = [...allPayments, createdSppPayment]
+      setDbPayments(allPayments)
+      currentSppPayment = createdSppPayment
+    } catch {
+      // Keep API responsive even if creating automatic SPP invoice fails.
+    }
+  }
+
   const payments = selectedChild ? allPayments.filter((item) => item.studentId === selectedChild.id) : []
+  const sppInfo = selectedChild
+    ? {
+        grade: selectedGrade || "-",
+        isConfigured: Boolean(currentSppDefault),
+        amount: currentSppDefault?.amount || 0,
+        dueDay: currentSppDefault?.dueDay || null,
+        status: currentSppPayment?.status || (currentSppDefault ? "UNPAID" : "UNCONFIGURED"),
+        paymentId: currentSppPayment?.id || null,
+        semester: currentPeriodKey,
+      }
+    : null
 
   const parent = {
     id: parentUser.id,
@@ -257,5 +375,7 @@ export async function GET(request: Request) {
     attendance,
     activityPoints,
     payments,
+    sppInfo,
+    teacherPiketSchedules,
   })
 }

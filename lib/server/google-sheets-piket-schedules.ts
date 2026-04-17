@@ -5,7 +5,7 @@ import type { PiketSchedule } from "@/lib/data-model"
 
 const PIKET_SCHEDULE_SHEET_PRIMARY_NAME = "piket_schedule"
 const PIKET_SCHEDULE_SHEET_CANDIDATES = ["piket_schedule", "piket_schedules", "piketschedule"]
-const PIKET_SCHEDULE_COLUMNS = ["id", "class_id", "day", "student_ids", "created_by", "updated_at"]
+const PIKET_SCHEDULE_COLUMNS = ["id", "class_id", "day", "student_ids", "created_by", "updated_at", "teacher_id"]
 
 const PIKET_SCHEDULE_READY_TTL_MS = 5 * 60_000
 const PIKET_SCHEDULE_CACHE_TTL_MS = 60_000
@@ -44,12 +44,40 @@ async function getServiceAccount(): Promise<ServiceAccount> {
 }
 
 function getSpreadsheetId() {
-  const spreadsheetId = process.env.GOOGLE_SHEETS_ID
-  if (!spreadsheetId) {
+  const rawSpreadsheetId = String(process.env.GOOGLE_SHEETS_ID || "").trim()
+  if (!rawSpreadsheetId) {
     throw new Error("GOOGLE_SHEETS_ID belum di-set.")
   }
 
-  return spreadsheetId
+  const normalized = rawSpreadsheetId.replace(/^['\"]|['\"]$/g, "").trim()
+  const directMatch = normalized.match(/^[A-Za-z0-9_-]{15,}$/)
+  if (directMatch) {
+    return directMatch[0]
+  }
+
+  const pathMatch = normalized.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{15,})/i)
+  if (pathMatch?.[1]) {
+    return pathMatch[1]
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsedUrl = new URL(normalized)
+      const queryId = String(parsedUrl.searchParams.get("id") || "").trim()
+      if (/^[A-Za-z0-9_-]{15,}$/.test(queryId)) {
+        return queryId
+      }
+
+      const pathnameMatch = String(parsedUrl.pathname || "").match(/\/d\/([A-Za-z0-9_-]{15,})/i)
+      if (pathnameMatch?.[1]) {
+        return pathnameMatch[1]
+      }
+    } catch {
+      // Continue to explicit validation error below.
+    }
+  }
+
+  throw new Error("GOOGLE_SHEETS_ID tidak valid. Gunakan Spreadsheet ID atau URL Google Sheets yang benar.")
 }
 
 async function getSheetsClient() {
@@ -98,6 +126,7 @@ function normalizePiketSchedule(input: PiketSchedule): PiketSchedule {
     classId: String(input.classId || "").trim(),
     day: String(input.day || "").trim(),
     studentIds: normalizeStudentIds(Array.isArray(input.studentIds) ? input.studentIds : []),
+    teacherId: String(input.teacherId || "").trim() || undefined,
     createdBy: String(input.createdBy || "system").trim() || "system",
   }
 }
@@ -109,6 +138,7 @@ function normalizePiketScheduleRow(row: string[]): PiketSchedule {
     day: String(row[2] || "").trim(),
     studentIds: parseStudentIds(row[3]),
     createdBy: String(row[4] || "").trim(),
+    teacherId: String(row[6] || "").trim() || undefined,
   })
 }
 
@@ -120,6 +150,7 @@ function toPiketScheduleSheetRow(schedule: PiketSchedule, updatedAt: string) {
     JSON.stringify(schedule.studentIds || []),
     schedule.createdBy,
     updatedAt,
+    schedule.teacherId || "",
   ]
 }
 
@@ -167,14 +198,14 @@ export async function ensurePiketSchedulesSheetReady() {
 
   const headerRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${piketScheduleSheetName}!A1:F1`,
+    range: `${piketScheduleSheetName}!A1:G1`,
   })
 
   const firstRow = headerRes.data.values?.[0] || []
   if (firstRow.length !== PIKET_SCHEDULE_COLUMNS.length) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${piketScheduleSheetName}!A1:F1`,
+      range: `${piketScheduleSheetName}!A1:G1`,
       valueInputOption: "RAW",
       requestBody: {
         values: [PIKET_SCHEDULE_COLUMNS],
@@ -192,14 +223,14 @@ async function replaceAllDbPiketSchedulesInSheet(schedules: PiketSchedule[]) {
 
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
-    range: `${piketScheduleSheetName}!A2:F`,
+    range: `${piketScheduleSheetName}!A2:G`,
   })
 
   if (schedules.length > 0) {
     const updatedAt = new Date().toISOString()
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${piketScheduleSheetName}!A2:F${schedules.length + 1}`,
+      range: `${piketScheduleSheetName}!A2:G${schedules.length + 1}`,
       valueInputOption: "RAW",
       requestBody: {
         values: schedules.map((item) => toPiketScheduleSheetRow(item, updatedAt)),
@@ -221,13 +252,13 @@ export async function getAllDbPiketSchedulesFromSheet(): Promise<PiketSchedule[]
 
   const rowsRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${piketScheduleSheetName}!A2:F`,
+    range: `${piketScheduleSheetName}!A2:G`,
   })
 
   const rows = rowsRes.data.values || []
   const data = rows
     .map((row) => normalizePiketScheduleRow(row as string[]))
-    .filter((item) => Boolean(item.id && item.classId && item.day))
+    .filter((item) => Boolean(item.id && item.day && (item.classId || item.teacherId)))
 
   piketSchedulesCache = {
     expiresAt: Date.now() + PIKET_SCHEDULE_CACHE_TTL_MS,
@@ -239,7 +270,8 @@ export async function getAllDbPiketSchedulesFromSheet(): Promise<PiketSchedule[]
 
 export async function createDbPiketSchedule(input: PiketSchedule): Promise<PiketSchedule> {
   const next = normalizePiketSchedule(input)
-  if (!next.classId || !next.day || next.studentIds.length === 0) {
+  const isTeacherDuty = Boolean(next.teacherId)
+  if (!next.day || (!isTeacherDuty && (!next.classId || next.studentIds.length === 0))) {
     throw new Error("Data jadwal piket belum lengkap")
   }
 
@@ -249,7 +281,7 @@ export async function createDbPiketSchedule(input: PiketSchedule): Promise<Piket
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${piketScheduleSheetName}!A:F`,
+    range: `${piketScheduleSheetName}!A1:G1`,
     valueInputOption: "RAW",
     requestBody: {
       values: [toPiketScheduleSheetRow(next, new Date().toISOString())],
@@ -279,7 +311,8 @@ export async function updateDbPiketScheduleById(input: Partial<PiketSchedule> & 
     studentIds: input.studentIds ? normalizeStudentIds(input.studentIds) : existing.studentIds,
   })
 
-  if (next.studentIds.length === 0) {
+  const isTeacherDuty = Boolean(next.teacherId)
+  if (!isTeacherDuty && next.studentIds.length === 0) {
     throw new Error("Pilih minimal 1 siswa")
   }
 
@@ -312,7 +345,14 @@ export async function migrateDbPiketSchedulesToSheet(sourceSchedules: PiketSched
   const existingIds = new Set(existing.map((item) => item.id))
   const missing = candidates
     .map((item) => normalizePiketSchedule(item))
-    .filter((item) => Boolean(item.id && item.classId && item.day && item.studentIds.length > 0 && !existingIds.has(item.id)))
+    .filter((item) =>
+      Boolean(
+        item.id &&
+          item.day &&
+          ((item.classId && item.studentIds.length > 0) || item.teacherId) &&
+          !existingIds.has(item.id),
+      ),
+    )
 
   if (missing.length === 0) {
     return existing
@@ -325,7 +365,7 @@ export async function migrateDbPiketSchedulesToSheet(sourceSchedules: PiketSched
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${piketScheduleSheetName}!A:F`,
+    range: `${piketScheduleSheetName}!A1:G1`,
     valueInputOption: "RAW",
     requestBody: {
       values: missing.map((item) => toPiketScheduleSheetRow(item, updatedAt)),

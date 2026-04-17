@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # 🎓 Aegix SLE - Smart Learning Ecosystem
 
 <div align="center">
@@ -31,7 +33,7 @@
 | **STUDENT** | Siswa | Dashboard, Jadwal, Tugas, Laporan Aset, Kantin |
 | **EMPLOYEE** | Guru | Jadwal Mengajar, Kelola Kelas, Input Nilai, AI Rapor |
 | **ADMIN** | Administrator | Scan QR, User Management, Kelola Kantin, Laporan |
-| **SUPER_ADMIN** | Kepala Sekolah | Keuangan, Manajemen Staff, Analytics |
+| **SUPER_ADMIN** | Kepala Sekolah | Keuangan, Default SPP per Grade, Manajemen Staff, Analytics |
 | **PARENT** | Orang Tua | Keuangan Anak, Kehadiran, Nilai, Jadwal Anak |
 | **CANTEEN_OWNER** | Pemilik Kantin | Produk, Order, Laporan Keuangan |
 
@@ -60,6 +62,19 @@
 - Restock otomatis saat order dibatalkan
 - Laporan keuangan pemilik kantin
 - CRUD produk pemilik kantin (tambah, edit, hapus, toggle ketersediaan)
+
+### 💳 Sistem SPP
+- Super Admin bisa CRUD default nominal SPP per grade
+- Parent melihat status SPP bulanan per anak
+- Parent bisa bayar SPP langsung dari halaman keuangan
+- Auto-generate invoice SPP bulanan saat data dibuka (jika default grade tersedia)
+- Data tersimpan di sheet `spp_defaults` dan `student_payment`
+
+### 📅 Sistem Piket Guru
+- Admin bisa CRUD jadwal piket guru per hari
+- Jadwal piket guru tampil di halaman jadwal Admin, Guru, Siswa, dan Parent
+- Dukungan hari Senin sampai Sabtu
+- Data tersimpan di sheet `piket_schedule` dengan mode siswa/guru (field `teacher_id`)
 
 ---
 
@@ -99,6 +114,12 @@ open https://your-domain.example
 - `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` (opsional): OAuth client secret untuk upload Drive via akun Google user.
 - `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN` (opsional): refresh token akun Google user untuk upload Drive jika tidak memakai Shared Drive.
 - Jika memakai OAuth Drive, isi ketiga variabel OAuth di atas sekaligus (all-or-nothing).
+
+### Google Sheets Data Notes
+
+- Sheet `parent_children` dipakai sebagai sumber utama relasi parent-anak.
+- Field `parents.childrenIds` di store tetap dipertahankan sebagai fallback kompatibilitas.
+- Sinkronisasi relasi parent-anak dilakukan saat create/update/delete parent dan saat delete student.
 
 ### Upload Media (Google Drive)
 
@@ -314,8 +335,13 @@ npm run type-check   # TypeScript check (jika ada)
 - [x] CRUD produk pemilik kantin
 - [x] Integrasi order kantin owner end-to-end
 - [x] Jadwal untuk siswa, guru, dan orang tua
+- [x] Jadwal piket guru (CRUD admin + tampil lintas role)
 - [x] User management (Admin)
+- [x] Default SPP per grade (Super Admin)
+- [x] Pembayaran SPP parent langsung dari dashboard keuangan
+- [x] Relasi parent-anak via sheet `parent_children`
 - [x] Financial reports (Super Admin, Canteen Owner)
+- [x] Menu aksi mobile 3 titik berbasis klik/tap
 - [x] Toast notifications
 - [x] Loading states & animations
 - [x] SEO optimization
